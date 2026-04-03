@@ -1,0 +1,18 @@
+﻿{
+  "rice_cooked": {
+    "density_g_per_cm3": 0.87,
+    "source": "FAO/INFOODS"
+  },
+  "beans_cooked": {
+    "density_g_per_cm3": 1.05,
+    "source": "FAO/INFOODS"
+  },
+  "grilled_chicken": {
+    "density_g_per_cm3": 1.04,
+    "source": "Literature"
+  },
+  "default": {
+    "density_g_per_cm3": 0.90,
+    "source": "Conservative estimate"
+  }
+}

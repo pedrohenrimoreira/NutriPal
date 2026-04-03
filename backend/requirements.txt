@@ -1,0 +1,24 @@
+# Core
+fastapi>=0.115.0
+uvicorn[standard]>=0.32.0
+pydantic>=2.10.0
+python-dotenv>=1.0.0
+python-multipart>=0.0.12
+
+# Imagem e processamento
+pillow>=11.0.0
+numpy>=1.26.0
+opencv-python-headless>=4.10.0
+
+# Busca fuzzy (Camada 0 - dataset)
+rapidfuzz>=3.10.0
+
+# IA / ML  (descomente conforme necessário no ambiente)
+# ultralytics>=8.3.0          # YOLOv11
+# segment-anything-2          # SAM 2 (Meta)
+# google-generativeai>=0.8.0  # Gemini Flash / Pro
+# anthropic>=0.39.0           # Claude Haiku / Sonnet
+
+# Testes
+pytest>=8.0.0
+httpx>=0.28.0

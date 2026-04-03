@@ -1,0 +1,11 @@
+{
+  "rice_cooked": { "density_g_per_cm3": 0.87, "source": "FAO/INFOODS" },
+  "beans_cooked": { "density_g_per_cm3": 1.05, "source": "FAO/INFOODS" },
+  "grilled_chicken": { "density_g_per_cm3": 1.04, "source": "Literature" },
+  "lettuce": { "density_g_per_cm3": 0.06, "source": "Literature" },
+  "tomato": { "density_g_per_cm3": 0.96, "source": "FAO/INFOODS" },
+  "bread_white": { "density_g_per_cm3": 0.30, "source": "Literature" },
+  "scrambled_eggs": { "density_g_per_cm3": 0.75, "source": "Literature" },
+  "pasta_cooked": { "density_g_per_cm3": 0.85, "source": "FAO/INFOODS" },
+  "default": { "density_g_per_cm3": 0.90, "source": "Conservative estimate" }
+}
