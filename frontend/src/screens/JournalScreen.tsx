@@ -255,7 +255,7 @@ export function JournalScreen({ onOpenSettings }: JournalScreenProps) {
         className="flex-1 overflow-y-auto px-5 pt-4"
         style={{
           WebkitOverflowScrolling: 'touch',
-          paddingBottom: keyboardOffset > 0 ? '56px' : '8px',
+          paddingBottom: isEditing ? '68px' : '8px',
         }}
         {...swipeHandlers}
       >
@@ -327,8 +327,8 @@ export function JournalScreen({ onOpenSettings }: JournalScreenProps) {
         </div>
       </div>
 
-      {/* Goals panel — hidden when keyboard is open */}
-      {keyboardOffset === 0 && (
+      {/* Goals panel — hidden when editing (keyboard open) */}
+      {!isEditing && (
         <div className="flex-shrink-0">
           <GoalsPanel
             isExpanded={goalsExpanded}
@@ -339,11 +339,11 @@ export function JournalScreen({ onOpenSettings }: JournalScreenProps) {
         </div>
       )}
 
-      {/* Bottom bar: totals pill (keyboard closed) or iOS accessory (keyboard open) */}
+      {/* Bottom bar: totals pill (keyboard closed) or accessory bar (keyboard open) */}
       <div className="flex-shrink-0">
         <ActionBar
           totals={totals}
-          keyboardOffset={keyboardOffset}
+          isEditing={isEditing}
           isListening={isListening}
           onAddSavedMeal={handleAddSavedMeal}
           onImageSelected={handleImageSelected}

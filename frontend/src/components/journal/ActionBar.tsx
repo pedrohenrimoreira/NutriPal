@@ -2,8 +2,10 @@
  * components/journal/ActionBar.tsx
  *
  * Two modes:
- * - Keyboard closed → totals pill (🔥 cal • C • P • F)
- * - Keyboard open   → iOS 26 inputAccessoryView glued above keyboard
+ * - isEditing = false → totals pill (🔥 cal • C • P • F) in normal flow
+ * - isEditing = true  → iOS-style inputAccessoryView, position:fixed bottom:0
+ *                       Works on iOS Safari 15+ (fixed = visual viewport) and
+ *                       Android Chrome (layout resizes → bottom:0 = top of keyboard)
  */
 
 import { useRef, type ChangeEvent } from 'react';
@@ -13,7 +15,7 @@ type ImageSource = 'camera' | 'library';
 
 interface ActionBarProps {
   totals: NutritionTotals;
-  keyboardOffset: number;
+  isEditing: boolean;
   isListening: boolean;
   onAddSavedMeal: () => void;
   onImageSelected: (file: File, source: ImageSource) => void;
@@ -23,7 +25,7 @@ interface ActionBarProps {
 
 export function ActionBar({
   totals,
-  keyboardOffset,
+  isEditing,
   isListening,
   onAddSavedMeal,
   onImageSelected,
@@ -31,7 +33,6 @@ export function ActionBar({
   onDismissKeyboard,
 }: ActionBarProps) {
   const fileInputRef = useRef<HTMLInputElement>(null);
-  const isKeyboardOpen = keyboardOffset > 0;
 
   const handleFileSelected = (e: ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
@@ -45,8 +46,8 @@ export function ActionBar({
   const prot = Math.round(totals.protein_g);
   const fat = Math.round(totals.fat_g);
 
-  /* ── Keyboard closed: macro summary pill ── */
-  if (!isKeyboardOpen) {
+  /* ── Keyboard closed: macro summary pill in normal flow ── */
+  if (!isEditing) {
     return (
       <div className="totals-bar">
         <div className="totals-pill">
@@ -66,7 +67,7 @@ export function ActionBar({
     );
   }
 
-  /* ── Keyboard open: iOS 26 accessory bar ── */
+  /* ── Keyboard open: accessory bar fixed at bottom:0 ── */
   return (
     <>
       <input
@@ -77,25 +78,45 @@ export function ActionBar({
         onChange={handleFileSelected}
       />
       <div
-        className="keyboard-accessory"
-        style={{ bottom: keyboardOffset }}
+        className="action-bar"
+        style={{
+          position: 'fixed',
+          bottom: 0,
+          left: 0,
+          right: 0,
+          zIndex: 50,
+          background: 'var(--bg-primary)',
+          borderTop: '0.5px solid rgba(255,255,255,0.10)',
+          paddingBottom: 'calc(4px + env(safe-area-inset-bottom, 0px))',
+          justifyContent: 'space-between',
+          paddingLeft: 16,
+          paddingRight: 12,
+        }}
       >
-        {/* Left: calories pill */}
-        <div className="accessory-cal-pill">
-          <span style={{ color: '#f97316' }}>🔥</span>
-          <span>{cal}</span>
-        </div>
+        {/* Calories pill — left */}
+        <button
+          className="pill px-4 py-2.5"
+          style={{ minWidth: '80px', justifyContent: 'center' }}
+        >
+          <span>🔥</span>
+          <span className="font-semibold">{cal}</span>
+        </button>
 
-        {/* Right: action icons */}
-        <div className="accessory-actions">
+        {/* Action buttons — right */}
+        <div className="flex items-center gap-2">
           {/* Mic */}
           <button
-            className={`accessory-btn${isListening ? ' active' : ''}`}
+            className="action-btn"
             onClick={onToggleMic}
             aria-label={isListening ? 'Parar gravação' : 'Gravar voz'}
-            style={isListening ? { animation: 'pulse-mic 1.5s ease-in-out infinite' } : undefined}
+            style={{
+              background: isListening ? 'rgba(239,68,68,0.2)' : 'rgba(59,130,246,0.15)',
+              borderColor: isListening ? 'rgba(239,68,68,0.4)' : 'rgba(59,130,246,0.3)',
+              color: isListening ? '#ef4444' : '#3b82f6',
+              animation: isListening ? 'pulse-mic 1.5s ease-in-out infinite' : undefined,
+            }}
           >
-            <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
               <path d="M12 1a3 3 0 0 0-3 3v8a3 3 0 0 0 6 0V4a3 3 0 0 0-3-3z" />
               <path d="M19 10v2a7 7 0 0 1-14 0v-2" />
               <line x1="12" y1="19" x2="12" y2="23" />
@@ -103,13 +124,18 @@ export function ActionBar({
             </svg>
           </button>
 
-          {/* Camera / library */}
+          {/* Camera */}
           <button
-            className="accessory-btn"
+            className="action-btn"
             onClick={() => fileInputRef.current?.click()}
             aria-label="Escolher imagem"
+            style={{
+              background: 'rgba(236,72,153,0.15)',
+              borderColor: 'rgba(236,72,153,0.3)',
+              color: '#ec4899',
+            }}
           >
-            <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
               <path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z" />
               <circle cx="12" cy="13" r="4" />
             </svg>
@@ -117,7 +143,7 @@ export function ActionBar({
 
           {/* Add saved meal */}
           <button
-            className="accessory-btn"
+            className="action-btn"
             onClick={onAddSavedMeal}
             aria-label="Adicionar refeição salva"
           >
@@ -129,19 +155,21 @@ export function ActionBar({
 
           {/* Dismiss keyboard */}
           <button
-            className="accessory-btn"
+            className="action-btn"
             onClick={onDismissKeyboard}
             aria-label="Fechar teclado"
           >
-            <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
-              <rect x="2" y="3" width="20" height="13" rx="2" />
-              <line x1="7" y1="8" x2="7" y2="8" strokeWidth="2.5" />
-              <line x1="12" y1="8" x2="12" y2="8" strokeWidth="2.5" />
-              <line x1="17" y1="8" x2="17" y2="8" strokeWidth="2.5" />
-              <line x1="7" y1="12" x2="7" y2="12" strokeWidth="2.5" />
-              <line x1="12" y1="12" x2="12" y2="12" strokeWidth="2.5" />
-              <line x1="17" y1="12" x2="17" y2="12" strokeWidth="2.5" />
-              <polyline points="9 20 12 17 15 20" />
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
+              <rect x="2" y="4" width="20" height="16" rx="2" ry="2" />
+              <line x1="6" y1="8" x2="6" y2="8" />
+              <line x1="10" y1="8" x2="10" y2="8" />
+              <line x1="14" y1="8" x2="14" y2="8" />
+              <line x1="18" y1="8" x2="18" y2="8" />
+              <line x1="6" y1="12" x2="6" y2="12" />
+              <line x1="10" y1="12" x2="10" y2="12" />
+              <line x1="14" y1="12" x2="14" y2="12" />
+              <line x1="18" y1="12" x2="18" y2="12" />
+              <line x1="8" y1="16" x2="16" y2="16" />
             </svg>
           </button>
         </div>
