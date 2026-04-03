@@ -1,26 +1,44 @@
-# React Native
+# Learn more https://docs.github.com/en/get-started/getting-started-with-git/ignoring-files
+
+# dependencies
 node_modules/
-.bundle/
 
-# iOS
-ios/Pods/
-ios/build/
-*.xcworkspace
-!default.xcworkspace
-*.xcuserdata
-ios/*.xcarchive
+# Expo
+.expo/
+dist/
+web-build/
+expo-env.d.ts
 
-# Android
-android/build/
-android/app/build/
-android/.gradle/
-android/local.properties
-*.keystore
-!debug.keystore
+# Native
+*.orig.*
+*.jks
+*.p8
+*.p12
+*.key
+*.mobileprovision
 
 # Metro
 .metro-health-check*
 
-# Environment
+# debug
+npm-debug.*
+yarn-debug.*
+yarn-error.*
+
+# macOS
+.DS_Store
+*.pem
+
+# local env files
+.env*.local
+
+# typescript
+*.tsbuildinfo
+
+app-example
+
 .env
-.env.local
+
+.metro-virtual/*
+
+caches/*
