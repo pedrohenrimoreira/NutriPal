@@ -135,11 +135,6 @@ export function JournalScreen({ onOpenSettings }: JournalScreenProps) {
     clearTranscript();
   };
 
-  const handleDismissKeyboard = () => {
-    textareaRef.current?.blur();
-    setIsEditing(false);
-  };
-
   const handleImageSelected = async (file: File, source: 'camera' | 'library') => {
     const imageUrl = URL.createObjectURL(file);
 
@@ -253,10 +248,7 @@ export function JournalScreen({ onOpenSettings }: JournalScreenProps) {
       <div
         ref={scrollRef}
         className="flex-1 overflow-y-auto px-5 pt-4"
-        style={{
-          WebkitOverflowScrolling: 'touch',
-          paddingBottom: isEditing ? '68px' : '8px',
-        }}
+        style={{ WebkitOverflowScrolling: 'touch' }}
         {...swipeHandlers}
       >
         <div style={contentStyle}>
@@ -327,28 +319,44 @@ export function JournalScreen({ onOpenSettings }: JournalScreenProps) {
         </div>
       </div>
 
-      {/* Goals panel — hidden when editing (keyboard open) */}
-      {!isEditing && (
-        <div className="flex-shrink-0">
-          <GoalsPanel
-            isExpanded={goalsExpanded}
-            onToggle={() => setGoalsExpanded(!goalsExpanded)}
-            totals={totals}
-            goals={goals}
-          />
-        </div>
-      )}
-
-      {/* Bottom bar: totals pill (keyboard closed) or accessory bar (keyboard open) */}
-      <div className="flex-shrink-0">
-        <ActionBar
+      <div
+        className="flex-shrink-0"
+        style={{
+          opacity: keyboardOffset > 0 ? 0 : 1,
+          transform: keyboardOffset > 0 ? 'translateY(8px) scale(0.98)' : 'translateY(0) scale(1)',
+          filter: keyboardOffset > 0 ? 'blur(8px)' : 'blur(0px)',
+          transition: 'opacity 0.25s ease, transform 0.25s ease, filter 0.25s ease',
+          pointerEvents: keyboardOffset > 0 ? 'none' : 'auto',
+        }}
+      >
+        <GoalsPanel
+          isExpanded={goalsExpanded}
+          onToggle={() => setGoalsExpanded(!goalsExpanded)}
           totals={totals}
-          isEditing={isEditing}
+          goals={goals}
+        />
+      </div>
+
+      <div
+        className="flex-shrink-0"
+        style={{
+          position: keyboardOffset > 0 ? 'fixed' : 'relative',
+          bottom: keyboardOffset > 0 ? `${keyboardOffset}px` : undefined,
+          left: 0,
+          right: 0,
+          zIndex: 30,
+          transition: 'bottom 0.15s ease-out',
+          background: keyboardOffset > 0 ? 'var(--bg-primary)' : 'transparent',
+          borderTop: keyboardOffset > 0 ? '1px solid var(--glass-border)' : 'none',
+        }}
+      >
+        <ActionBar
+          calories={Math.round(totals.calories)}
           isListening={isListening}
+          onStartEditing={handleStartEditing}
           onAddSavedMeal={handleAddSavedMeal}
           onImageSelected={handleImageSelected}
           onToggleMic={handleToggleMic}
-          onDismissKeyboard={handleDismissKeyboard}
         />
       </div>
     </div>
