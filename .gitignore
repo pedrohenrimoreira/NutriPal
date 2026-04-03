@@ -16,3 +16,14 @@ venv/
 backend/data/weights/*.pth
 backend/data/weights/*.pt
 backend/data/weights/*.ckpt
+
+# Local tooling / machine-specific
+.claude/
+tools/
+
+# Local tunnel logs
+frontend/.cloudflared*.log
+frontend/.mobile-tunnel/
+
+# Local planning docs
+ROADMAP.md

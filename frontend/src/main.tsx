@@ -3,14 +3,30 @@ import ReactDOM from 'react-dom/client';
 import App from './App';
 import './index.css';
 
-/**
- * Entry point do NutriLens PWA.
- *
- * Renderiza o componente raiz <App /> no #root.
- * Service worker será registrado pelo vite-plugin-pwa quando habilitado.
- */
-ReactDOM.createRoot(document.getElementById('root')!).render(
-  <React.StrictMode>
-    <App />
-  </React.StrictMode>,
-);
+const rootEl = document.getElementById('root');
+const fallbackEl = document.getElementById('boot-fallback');
+
+function showBootError(message: string): void {
+  if (fallbackEl) {
+    fallbackEl.textContent = message;
+    fallbackEl.style.color = '#f87171';
+  }
+}
+
+if (!rootEl) {
+  showBootError('Falha ao iniciar: elemento root nao encontrado.');
+} else {
+  try {
+    ReactDOM.createRoot(rootEl).render(
+      <React.StrictMode>
+        <App />
+      </React.StrictMode>,
+    );
+    if (fallbackEl) {
+      fallbackEl.remove();
+    }
+  } catch (error) {
+    console.error('Bootstrap error:', error);
+    showBootError('Erro ao iniciar o app. Recarregue a pagina.');
+  }
+}

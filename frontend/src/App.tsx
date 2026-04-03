@@ -1,20 +1,21 @@
+﻿import { useState } from 'react';
 import { JournalScreen } from './screens/JournalScreen';
+import { SettingsSheet } from './components/settings/SettingsSheet';
 
 /**
- * Componente raiz do NutriLens.
- *
- * Arquitetura de navegação:
- * - JournalScreen: tela principal (diário do dia)
- * - HistoryScreen: histórico de dias anteriores
- * - SettingsScreen: configurações do app
- *
- * TODO: implementar roteamento (react-router ou navegação simples por estado).
- * Por ora, renderiza apenas o JournalScreen.
+ * NutriPal - App root.
  */
 function App() {
+  const [settingsOpen, setSettingsOpen] = useState(false);
+
   return (
-    <div className="min-h-screen bg-slate-950 text-white">
-      <JournalScreen />
+    <div
+      id="app-root"
+      className="h-full flex flex-col overflow-hidden"
+      style={{ background: 'var(--bg-primary)', minHeight: '100dvh' }}
+    >
+      <JournalScreen onOpenSettings={() => setSettingsOpen(true)} />
+      <SettingsSheet isOpen={settingsOpen} onClose={() => setSettingsOpen(false)} />
     </div>
   );
 }

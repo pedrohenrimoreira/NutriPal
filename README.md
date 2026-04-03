@@ -78,6 +78,32 @@ npm run build        # build de producao
 npm run preview      # preview do build
 ```
 
+### Teste no celular (HTTPS + microfone)
+
+Use este workflow para gerar um link HTTPS publico rapidamente:
+
+```bash
+# na raiz do projeto
+npm run mobile:test
+```
+
+O script:
+- sobe/reaproveita o Vite em `0.0.0.0:5173`
+- sobe um Cloudflare Tunnel com host-header correto para Vite
+- imprime e copia o link `https://...trycloudflare.com`
+
+Comandos auxiliares:
+
+```bash
+# parar so o tunel
+npm run mobile:stop
+
+# parar tunel + vite
+npm run mobile:stop:all
+```
+
+Observacao: para iPhone, abra o link no Safari e permita acesso ao microfone.
+
 ### Backend (FastAPI)
 
 ```bash

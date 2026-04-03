@@ -1,86 +1,121 @@
 /**
- * store/journalStore.ts – Zustand store para o diário nutricional.
+ * store/journalStore.ts - In-memory journal store (scaffold-safe).
  *
- * Gerencia o estado das entradas de refeição (MealEntry) do dia atual
- * e a interação com o banco local (Dexie / IndexedDB).
- *
- * Responsabilidades:
- * - CRUD de MealEntry
- * - Carregar entradas do dia selecionado
- * - Persistir no IndexedDB via Dexie
- * - Marcar entradas como "dirty" quando editadas
- *
- * Biblioteca: Zustand (https://github.com/pmndrs/zustand)
+ * This keeps the app interactive now without implementing full persistence.
+ * Dexie/IndexedDB wiring can replace the in-memory map in the next phase.
  */
 
 import { create } from 'zustand';
-import type { MealEntry, DayLog } from '../types/food';
+import type { MealEntry } from '../types/food';
 
-// ---------------------------------------------------------------------------
-// State shape
-// ---------------------------------------------------------------------------
+const inMemoryLogs: Record<string, MealEntry[]> = {};
+
+function makeId(): string {
+  if (typeof crypto !== 'undefined' && typeof crypto.randomUUID === 'function') {
+    return crypto.randomUUID();
+  }
+  return `entry-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
+}
+
+function getDateKey(input?: Date): string {
+  const d = input ?? new Date();
+  return d.toISOString().slice(0, 10);
+}
+
+function cloneEntries(entries: MealEntry[]): MealEntry[] {
+  return entries.map((entry) => ({
+    ...entry,
+    createdAt: new Date(entry.createdAt),
+    parsedResult: entry.parsedResult ? { ...entry.parsedResult } : entry.parsedResult,
+  }));
+}
 
 export interface JournalState {
-  /** Data selecionada no formato YYYY-MM-DD. */
   selectedDate: string;
-  /** Entradas do dia selecionado. */
   entries: MealEntry[];
-  /** Se está carregando do IndexedDB. */
   isLoading: boolean;
-
-  // Actions
-  /** Carrega as entradas de uma data específica do IndexedDB. */
   loadDay: (date: string) => Promise<void>;
-  /** Adiciona uma nova entrada de texto. */
   addTextEntry: (rawText: string) => Promise<void>;
-  /** Adiciona uma nova entrada de foto. */
   addImageEntry: (imageUrl: string) => Promise<void>;
-  /** Atualiza o resultado parsed de uma entrada. */
   updateParsedResult: (entryId: string, result: MealEntry['parsedResult']) => void;
-  /** Remove uma entrada. */
   removeEntry: (entryId: string) => Promise<void>;
-  /** Muda a data selecionada e recarrega. */
   setDate: (date: string) => void;
 }
 
-// ---------------------------------------------------------------------------
-// Store
-// ---------------------------------------------------------------------------
-
-export const useJournalStore = create<JournalState>((set, _get) => ({
-  selectedDate: new Date().toISOString().slice(0, 10),
+export const useJournalStore = create<JournalState>((set, get) => ({
+  selectedDate: getDateKey(),
   entries: [],
   isLoading: false,
 
-  loadDay: async (_date: string): Promise<void> => {
-    // TODO: implement – ler do Dexie, filtrar por data, ordenar por createdAt
+  loadDay: async (date: string): Promise<void> => {
     set({ isLoading: true });
-    // const entries = await db.meals.where('date').equals(date).toArray();
-    set({ entries: [], isLoading: false });
+    const dayEntries = inMemoryLogs[date] ?? [];
+    set({ entries: cloneEntries(dayEntries), isLoading: false });
   },
 
-  addTextEntry: async (_rawText: string): Promise<void> => {
-    // TODO: implement – criar MealEntry com UUID, persistir no Dexie
-    throw new Error('TODO: implement addTextEntry');
+  addTextEntry: async (rawText: string): Promise<void> => {
+    const state = get();
+    const text = rawText.trim();
+    if (!text) return;
+
+    const nextEntry: MealEntry = {
+      id: makeId(),
+      rawText: text,
+      createdAt: new Date(),
+      date: state.selectedDate,
+      isDirty: true,
+    };
+
+    const existing = inMemoryLogs[state.selectedDate] ?? [];
+    const updated = [...existing, nextEntry];
+    inMemoryLogs[state.selectedDate] = updated;
+
+    set({ entries: cloneEntries(updated) });
   },
 
-  addImageEntry: async (_imageUrl: string): Promise<void> => {
-    // TODO: implement – criar MealEntry com imageUrl, persistir no Dexie
-    throw new Error('TODO: implement addImageEntry');
+  addImageEntry: async (imageUrl: string): Promise<void> => {
+    const state = get();
+    if (!imageUrl) return;
+
+    const nextEntry: MealEntry = {
+      id: makeId(),
+      rawText: 'Foto enviada para analise',
+      imageUrl,
+      createdAt: new Date(),
+      date: state.selectedDate,
+      isDirty: true,
+    };
+
+    const existing = inMemoryLogs[state.selectedDate] ?? [];
+    const updated = [...existing, nextEntry];
+    inMemoryLogs[state.selectedDate] = updated;
+
+    set({ entries: cloneEntries(updated) });
   },
 
-  updateParsedResult: (_entryId: string, _result: MealEntry['parsedResult']): void => {
-    // TODO: implement – atualizar entrada e persistir
-    throw new Error('TODO: implement updateParsedResult');
+  updateParsedResult: (entryId: string, result: MealEntry['parsedResult']): void => {
+    const state = get();
+    const existing = inMemoryLogs[state.selectedDate] ?? [];
+    const updated = existing.map((entry) =>
+      entry.id === entryId
+        ? { ...entry, parsedResult: result ?? undefined, isDirty: false }
+        : entry,
+    );
+
+    inMemoryLogs[state.selectedDate] = updated;
+    set({ entries: cloneEntries(updated) });
   },
 
-  removeEntry: async (_entryId: string): Promise<void> => {
-    // TODO: implement – remover do Dexie e do state
-    throw new Error('TODO: implement removeEntry');
+  removeEntry: async (entryId: string): Promise<void> => {
+    const state = get();
+    const existing = inMemoryLogs[state.selectedDate] ?? [];
+    const updated = existing.filter((entry) => entry.id !== entryId);
+    inMemoryLogs[state.selectedDate] = updated;
+    set({ entries: cloneEntries(updated) });
   },
 
   setDate: (date: string): void => {
-    set({ selectedDate: date });
-    // TODO: chamar loadDay(date) após implementar
+    const dayEntries = inMemoryLogs[date] ?? [];
+    set({ selectedDate: date, entries: cloneEntries(dayEntries) });
   },
 }));

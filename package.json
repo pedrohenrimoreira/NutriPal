@@ -1,4 +1,11 @@
 {
+  "name": "nutrilens-workspace",
+  "private": true,
+  "scripts": {
+    "mobile:test": "powershell -ExecutionPolicy Bypass -File scripts/mobile-tunnel.ps1",
+    "mobile:stop": "powershell -ExecutionPolicy Bypass -File scripts/mobile-tunnel-stop.ps1",
+    "mobile:stop:all": "powershell -ExecutionPolicy Bypass -File scripts/mobile-tunnel-stop.ps1 -StopFrontend"
+  },
   "devDependencies": {
     "typescript": "^6.0.2"
   }
