@@ -8,17 +8,19 @@
  */
 
 :root {
-  --bg-primary: #0a0a0a;
-  --bg-secondary: #111111;
-  --glass-bg: rgba(255, 255, 255, 0.05);
-  --glass-bg-hover: rgba(255, 255, 255, 0.08);
-  --glass-border: rgba(255, 255, 255, 0.08);
-  --glass-border-light: rgba(255, 255, 255, 0.12);
+  --bg-primary: #000000;
+  --bg-secondary: #1c1c1e;
+  --glass-bg: rgba(255, 255, 255, 0.04);
+  --glass-bg-hover: rgba(255, 255, 255, 0.07);
+  --glass-border: rgba(255, 255, 255, 0.07);
+  --glass-border-light: rgba(255, 255, 255, 0.11);
   --glass-blur: 20px;
 
-  --text-primary: #f5f5f5;
-  --text-secondary: #a1a1aa;
-  --text-muted: #52525b;
+  /* iOS 26 dark mode system grays */
+  --text-primary: #ffffff;
+  --text-secondary: #8e8e93;
+  --text-muted: #48484a;
+  --text-tertiary: #3a3a3c;
 
   --accent-orange: #f97316;
   --accent-green: #22c55e;
@@ -299,35 +301,95 @@ body {
 }
 
 /* ==========================================
-   ACTION BAR (bottom toolbar)
+   TOTALS BAR (keyboard closed, bottom)
    ========================================== */
 
-.action-bar {
+.totals-bar {
   display: flex;
-  align-items: center;
   justify-content: center;
-  gap: 8px;
-  padding: 12px 16px;
-  padding-bottom: calc(12px + var(--safe-bottom));
+  align-items: center;
+  padding: 10px 20px;
+  padding-bottom: calc(10px + var(--safe-bottom));
 }
 
-.action-btn {
+.totals-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 10px 20px;
+  border-radius: 100px;
+  background: rgba(255, 255, 255, 0.05);
+  border: 0.5px solid rgba(255, 255, 255, 0.09);
+  font-size: 14px;
+  font-weight: 500;
+  color: var(--text-primary);
+  letter-spacing: -0.1px;
+}
+
+.totals-pill-dot {
+  width: 3px;
+  height: 3px;
+  border-radius: 50%;
+  background: var(--text-muted);
+  flex-shrink: 0;
+}
+
+/* ==========================================
+   iOS 26 KEYBOARD ACCESSORY BAR
+   ========================================== */
+
+.keyboard-accessory {
+  position: fixed;
+  left: 0;
+  right: 0;
+  z-index: 50;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  height: 44px;
+  padding: 0 8px 0 12px;
+  background: rgba(22, 22, 23, 0.97);
+  backdrop-filter: blur(24px) saturate(180%);
+  -webkit-backdrop-filter: blur(24px) saturate(180%);
+  border-top: 0.5px solid rgba(255, 255, 255, 0.14);
+}
+
+.accessory-cal-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 6px 12px;
+  border-radius: 100px;
+  background: rgba(255, 255, 255, 0.07);
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--text-primary);
+  letter-spacing: -0.1px;
+}
+
+.accessory-actions {
+  display: flex;
+  align-items: center;
+  gap: 0;
+}
+
+.accessory-btn {
   width: 44px;
   height: 44px;
-  border-radius: 50%;
   display: flex;
   align-items: center;
   justify-content: center;
-  background: rgba(255, 255, 255, 0.06);
-  border: 1px solid rgba(255, 255, 255, 0.08);
-  color: var(--text-secondary);
-  transition: all 0.2s ease;
-  font-size: 20px;
+  color: #8e8e93;
+  transition: opacity 0.12s ease;
+  -webkit-tap-highlight-color: transparent;
 }
 
-.action-btn:active {
-  background: rgba(255, 255, 255, 0.12);
-  transform: scale(0.92);
+.accessory-btn:active {
+  opacity: 0.4;
+}
+
+.accessory-btn.active {
+  color: #ef4444;
 }
 
 /* ==========================================
