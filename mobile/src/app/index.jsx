@@ -14,6 +14,7 @@ import {
   KeyboardAvoidingView, Platform, StyleSheet, Keyboard, LayoutAnimation,
   useWindowDimensions, Modal, Alert,
 } from "react-native";
+
 import * as ImagePicker from "expo-image-picker";
 import { SymbolView } from "expo-symbols";
 import { GlassView, isLiquidGlassAvailable } from "expo-glass-effect";
@@ -31,6 +32,9 @@ import { MealEntryCard } from "../components/journal/MealEntryCard";
 import { ActionBar } from "../components/journal/ActionBar";
 import { GoalsPanel } from "../components/journal/GoalsPanel";
 import { colors, spacing, radius, typography } from "../theme";
+
+const WEB_TOP_INSET = Platform.OS === "web" ? 67 : 0;
+const WEB_BOTTOM_INSET = Platform.OS === "web" ? 34 : 0;
 
 /* ── helpers ──────────────────────────────────────────────────────────────── */
 
@@ -519,7 +523,7 @@ export default function Index() {
       <StatusBar style="light" />
 
       {/* ── Header ──────────────────────────────────────────────────────── */}
-      <View style={[styles.header, { paddingTop: insets.top + 10 }]}>
+      <View style={[styles.header, { paddingTop: insets.top + WEB_TOP_INSET + 10 }]}>
         {/* Left column — fixed width to match right */}
         <View style={styles.headerSide}>
           <Text style={styles.logo}>🥗</Text>

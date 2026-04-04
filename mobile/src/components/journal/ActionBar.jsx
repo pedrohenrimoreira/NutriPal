@@ -16,9 +16,12 @@ import {
   StyleSheet,
   Platform,
 } from "react-native";
+
 import { GlassView, isLiquidGlassAvailable } from "expo-glass-effect";
 import { SymbolView } from "expo-symbols";
 import { colors, spacing, radius } from "../../theme";
+
+const WEB_BOTTOM_INSET = Platform.OS === "web" ? 34 : 0;
 
 /* ── helpers ──────────────────────────────────────────────────────────────── */
 
@@ -174,7 +177,7 @@ const styles = StyleSheet.create({
   summaryWrapper: {
     alignItems: "center",
     paddingVertical: spacing.md + 4,
-    paddingBottom: spacing.xl + 4,
+    paddingBottom: spacing.xl + 4 + WEB_BOTTOM_INSET,
   },
   summaryPill: {
     flexDirection: "row",
