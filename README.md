@@ -1,108 +1,82 @@
-# NutriLens
+# NutriPal
 
-NutriLens e um diario nutricional com tres formas de entrada:
+NutriPal agora esta organizado como um projeto mobile-first com backend separado.
+O legado do app web foi removido desta branch para concentrar o desenvolvimento no app Expo/React Native.
 
-1. Texto livre
-2. Foto do prato
-3. Barcode (futuro)
+## Superficies ativas
 
-Este repositorio esta em formato de scaffold. O objetivo e documentar arquitetura, contratos e pontos de extensao. A logica de negocio ainda nao foi implementada.
+- `mobile/`: aplicativo Expo Router para iPhone/Android.
+- `backend/`: API FastAPI e stubs do pipeline nutricional/visao.
+
+## Replit
+
+- Esta branch deve ser tratada como `mobile-first`.
+- O app ativo fica em `mobile/`.
+- Nao existe frontend web separado nesta branch.
+- No Replit, use o fluxo nativo do ambiente para abrir e iterar no app Expo/Expo Go.
+- O `backend/` continua separado e pode ser executado quando voce precisar de parsing/enriquecimento.
 
 ## Filosofia do produto
 
-- Alimentos comuns devem ser resolvidos localmente (sem custo de API).
-- Escalonamento por camada so quando necessario.
-- Pipeline de foto e o diferencial tecnico.
+- Texto livre e foto devem alimentar o mesmo fluxo de diario.
+- A resolucao local vem antes de qualquer chamada de modelo pago.
+- A data selecionada no diario e a fonte de verdade da experiencia.
+- O backend existe para parsing e enriquecimento, nao para reconstruir a UI.
 
 ## Arquitetura em camadas
 
-### Camada 0: dataset local (custo zero)
+### Camada 0: resolucao local
 
 - TACO (UNICAMP)
 - USDA FoodData Central (SQLite local)
-- Open Food Facts (base para barcode)
-- Busca fuzzy: `Fuse.js` no frontend e `rapidfuzz` no backend
+- heuristicas e tabelas locais no app / backend
 
-### Camada 1: LLM barato para texto simples
+### Camada 1: texto simples
 
-- `gemini-2.5-flash` ou `claude-haiku-4-5-20251001`
-- Entrada: texto livre + itens nao resolvidos localmente
-- Saida: JSON estruturado
+- parser barato/rapido para itens triviais
+- fallback para LLM apenas quando a camada local nao resolve
 
-### Camada 2: LLM medio para texto complexo
+### Camada 2: texto complexo
 
-- `claude-sonnet-4-6` ou `gemini-2.5-pro`
-- Para pratos compostos e preparacoes regionais
+- pratos compostos, receitas, ambiguidade regional
 
-### Camada 3: pipeline de visao (foto)
+### Camada 3: foto
 
-1. Segmentacao semantica (SAM 2)
-2. Deteccao/classificacao (YOLOv11 fine-tuned)
-3. Estimativa de profundidade (Depth Anything V2)
-4. Calculo de volume por segmento
-5. Conversao volume para gramas por densidade
-6. Lookup nutricional em TACO/USDA
-7. Validacao visual final por LLM com visao
-8. Resultado com intervalo de confianca
+1. Segmentacao
+2. Deteccao/classificacao
+3. Estimativa de profundidade
+4. Conversao de volume para gramas
+5. Lookup nutricional
+6. Validacao final
 
-## Fluxo de dados (alto nivel)
+## Fluxo de dados
 
-1. Usuario envia texto ou foto.
-2. Frontend aplica roteamento (`services/nutritionRouter.ts`).
-3. Camada 0 tenta resolver primeiro.
-4. Itens nao resolvidos sobem para parser textual no backend.
-5. Foto executa pipeline completo no backend.
-6. Resultado consolidado retorna em `ParseResponse`.
-7. Frontend persiste em Zustand + IndexedDB (Dexie).
-
-## Estrutura do projeto
-
-- `frontend/`: React 18 + TypeScript + Vite + PWA + Tailwind + Zustand + Dexie.
-- `backend/`: FastAPI + contratos Pydantic + stubs de pipeline de visao.
+1. O usuario digita ou anexa uma foto no app mobile.
+2. O app tenta resolver localmente o maximo possivel.
+3. O backend recebe somente o que exige parsing/enriquecimento.
+4. O resultado retorna ao mesmo dia selecionado no diario.
 
 ## Variaveis de ambiente
 
-- Frontend: `frontend/.env.example`
-- Backend: `backend/.env.example`
-- Monorepo (opcional): `.env.example`
+- `mobile/`: configuracao do app Expo
+- `backend/.env.example`: chaves e configuracao da API
+- `.env.example`: defaults compartilhados do workspace
 
 ## Como executar
 
-### Frontend (PWA)
+### Mobile (Expo)
 
 ```bash
-cd frontend
+npm run mobile:start
+```
+
+Ou diretamente:
+
+```bash
+cd mobile
 npm install
-npm run dev          # abre em localhost:5173
-npm run build        # build de producao
-npm run preview      # preview do build
+npx expo start --go --lan
 ```
-
-### Teste no celular (HTTPS + microfone)
-
-Use este workflow para gerar um link HTTPS publico rapidamente:
-
-```bash
-# na raiz do projeto
-npm run mobile:test
-```
-
-O script:
-- sobe/reaproveita o Vite em `0.0.0.0:5173`
-- sobe um Cloudflare Tunnel com host-header correto para Vite
-- imprime e copia o link `https://...trycloudflare.com`
-
-Comandos auxiliares:
-
-```bash
-# parar so o tunel
-npm run mobile:stop
-
-# parar tunel + vite
-npm run mobile:stop:all
-```
-
-Observacao: para iPhone, abra o link no Safari e permita acesso ao microfone.
 
 ### Backend (FastAPI)
 
@@ -111,31 +85,23 @@ cd backend
 python -m venv venv
 source venv/bin/activate   # Windows: venv\\Scripts\\activate
 pip install -r requirements.txt
-uvicorn main:app --reload  # abre em localhost:8000
+uvicorn main:app --reload --port 8000
 ```
 
 ## Pesos dos modelos
-
-As instrucoes de download de pesos estao em:
 
 - `backend/data/weights/README.md`
 
 Arquivos esperados:
 
 - `sam2_hiera_large.pt`
-- `yolo11_food.pt` (ou `yolo11n.pt` como base)
+- `yolo11_food.pt`
 - `depth_anything_v2_vitl.pth`
 
-## O que este scaffold NAO implementa
+## Estado atual
 
-- Logica de negocio real
-- Chamadas reais de API para LLM
-- Carregamento real de modelos
-- Autenticacao de usuario
-- Banco de dados de producao
+O repositorio ainda e um scaffold em varias partes:
 
-## Convencoes de implementacao para a proxima fase
-
-- Funcoes de servico permanecem com stubs e `TODO`.
-- Contratos de tipos e schemas sao a fonte de verdade.
-- Cada modulo de pipeline deve continuar desacoplado por interface.
+- o app mobile ja tem a tela principal e stores locais
+- o backend ainda tem varios `TODO`
+- a integracao real com LLM e pipeline de visao ainda precisa ser concluida

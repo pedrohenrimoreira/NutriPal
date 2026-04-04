@@ -27,9 +27,10 @@ app = FastAPI(
 # ---------------------------------------------------------------------------
 
 # TODO: ler CORS_ORIGINS do .env via python-dotenv
+# Placeholder mobile-first dev origins. Native requests usually do not rely on browser CORS.
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["http://localhost:5173", "https://nutrilens.vercel.app"],
+    allow_origins=["http://localhost:8081", "http://127.0.0.1:8081"],
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
