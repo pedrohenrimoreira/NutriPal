@@ -2,13 +2,6 @@ import { defineConfig } from 'vite';
 import react from '@vitejs/plugin-react';
 import { VitePWA } from 'vite-plugin-pwa';
 
-/**
- * Configuracao Vite para NutriPal PWA.
- *
- * - Plugin React para Fast Refresh
- * - Plugin PWA habilitado (manifest + service worker)
- * - Proxy de API para backend FastAPI local
- */
 export default defineConfig({
   plugins: [
     react(),
@@ -32,7 +25,9 @@ export default defineConfig({
     }),
   ],
   server: {
-    port: 5173,
+    host: '0.0.0.0',
+    port: 5000,
+    allowedHosts: true,
     proxy: {
       '/api': {
         target: 'http://localhost:8000',

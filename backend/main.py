@@ -29,8 +29,8 @@ app = FastAPI(
 # TODO: ler CORS_ORIGINS do .env via python-dotenv
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["http://localhost:5173", "https://nutrilens.vercel.app"],
-    allow_credentials=True,
+    allow_origins=["*"],
+    allow_credentials=False,
     allow_methods=["*"],
     allow_headers=["*"],
 )
