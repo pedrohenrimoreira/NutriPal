@@ -86,7 +86,7 @@ export function ActionBar({
   /* ─── Collapsed: floating nutrition summary ───────────────────────────── */
   if (!isEditing) {
     return (
-      <View style={styles.summaryWrapper}>
+      <View style={[styles.summaryWrapper, Platform.OS === "web" && styles.summaryWrapperWeb]}>
         <TouchableOpacity
           onPress={onToggleGoals}
           activeOpacity={0.75}
@@ -178,6 +178,12 @@ const styles = StyleSheet.create({
     alignItems: "center",
     paddingVertical: spacing.md + 4,
     paddingBottom: spacing.xl + 4 + WEB_BOTTOM_INSET,
+  },
+  summaryWrapperWeb: {
+    position: "absolute",
+    bottom: 0,
+    left: 0,
+    right: 0,
   },
   summaryPill: {
     flexDirection: "row",
