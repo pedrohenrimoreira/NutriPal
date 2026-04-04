@@ -1,16 +1,19 @@
 /**
- * NutriPal design tokens — dark graphite system.
+ * NutriPal design tokens — dark / light color system.
  *
- * Key principle: soft graphite, not pure black.
- * Surfaces build depth through incremental lightness steps.
+ * Dark: soft graphite, not pure black.
+ * Light: warm pastel inspired by #80694f.
+ *
+ * Backward-compatible — `colors` still exports dark palette.
+ * For reactive theme switching, use the `useThemeColors` hook.
  */
-import { StyleSheet } from "react-native";
+import { StyleSheet, useColorScheme } from "react-native";
 
-export const colors = {
+const darkColors = {
   // ── Surfaces ──────────────────────────────────────────────────────────────
-  bgPrimary:   "#141414",   // base canvas — dark graphite (not #000)
-  bgSecondary: "#1e1e1e",   // cards, sheets — one step lighter
-  bgTertiary:  "#272727",   // elevated modals, contextual layers
+  bgPrimary:   "#141414",
+  bgSecondary: "#1e1e1e",
+  bgTertiary:  "#272727",
 
   // ── System grays (iOS dark) ────────────────────────────────────────────────
   systemGray:  "#8e8e93",
@@ -40,17 +43,73 @@ export const colors = {
   accentYellow: "#eab308",
 
   // ── Liquid glass ─────────────────────────────────────────────────────────
-  // Slightly more visible than before so glass reads against graphite base.
   glassBg:       "rgba(255,255,255,0.08)",
   glassBgHover:  "rgba(255,255,255,0.13)",
   glassBorder:   "rgba(255,255,255,0.12)",
-  glassDeep:     "rgba(255,255,255,0.05)",   // subtler inset fill
+  glassDeep:     "rgba(255,255,255,0.05)",
 
   // ── Macros ────────────────────────────────────────────────────────────────
   carbs:   "#06b6d4",
   protein: "#a855f7",
   fat:     "#eab308",
 };
+
+const lightColors = {
+  // ── Surfaces — warm pastel inspired by #80694f ────────────────────────────
+  bgPrimary:   "#f5f0e8",   // warm cream canvas
+  bgSecondary: "#ebe4d8",   // slightly deeper warm
+  bgTertiary:  "#e0d7c8",   // elevated warm
+
+  // ── System grays (iOS light, warm-shifted) ────────────────────────────────
+  systemGray:  "#8e8e93",
+  systemGray2: "#aeaeb2",
+  systemGray3: "#c7c7cc",
+  systemGray4: "#d1d1d6",
+  systemGray5: "#e5e5ea",
+  systemGray6: "#f2f2f7",
+
+  // ── Separators ───────────────────────────────────────────────────────────
+  separator:       "rgba(0,0,0,0.08)",
+  separatorOpaque: "#d6cfc3",
+
+  // ── Text ─────────────────────────────────────────────────────────────────
+  textPrimary:   "#1c1a16",
+  textSecondary: "#6b6560",
+  textTertiary:  "#a09888",
+
+  // ── Accents (same vibrant accents work on light) ─────────────────────────
+  accentOrange: "#e86a0a",
+  accentGreen:  "#16a34a",
+  accentBlue:   "#2563eb",
+  accentPurple: "#9333ea",
+  accentRed:    "#dc2626",
+  accentCyan:   "#0891b2",
+  accentPink:   "#db2777",
+  accentYellow: "#ca8a04",
+
+  // ── Liquid glass (dark tint on light background) ─────────────────────────
+  glassBg:       "rgba(0,0,0,0.05)",
+  glassBgHover:  "rgba(0,0,0,0.08)",
+  glassBorder:   "rgba(0,0,0,0.10)",
+  glassDeep:     "rgba(0,0,0,0.03)",
+
+  // ── Macros ────────────────────────────────────────────────────────────────
+  carbs:   "#0891b2",
+  protein: "#9333ea",
+  fat:     "#ca8a04",
+};
+
+// Default export for backward compatibility — dark mode
+export const colors = darkColors;
+
+// Hook for components that need reactive theme switching
+export function useThemeColors() {
+  const scheme = useColorScheme();
+  return scheme === "light" ? lightColors : darkColors;
+}
+
+// Direct access
+export { darkColors, lightColors };
 
 export const spacing = {
   xs:  4,

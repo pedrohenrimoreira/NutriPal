@@ -83,7 +83,7 @@ export function GoalsPanel({ totals }) {
         styles.card,
         isLiquidGlassAvailable()
           ? {}
-          : { backgroundColor: "rgba(255,255,255,0.07)" },
+          : { backgroundColor: "rgba(255,255,255,0.09)" },
       ]}
     >
       <Text style={styles.title}>Goals</Text>
@@ -126,8 +126,12 @@ const styles = StyleSheet.create({
     borderRadius: radius.xl,
     padding: spacing.xl,
     marginBottom: spacing.sm,
-    borderWidth: StyleSheet.hairlineWidth,
-    borderColor: colors.glassBorder,
+    borderWidth: 1,
+    borderColor: "rgba(255,255,255,0.16)",
+    shadowColor: "#000",
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.15,
+    shadowRadius: 12,
   },
   title: {
     ...typography.headline,

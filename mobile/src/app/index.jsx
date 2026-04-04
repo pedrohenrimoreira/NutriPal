@@ -12,7 +12,7 @@ import React, {
 import {
   View, Text, TextInput, TouchableOpacity, ScrollView,
   KeyboardAvoidingView, Platform, StyleSheet, Keyboard, LayoutAnimation,
-  useWindowDimensions, Modal, Alert, ActionSheetIOS,
+  useWindowDimensions, Modal, Alert,
 } from "react-native";
 import * as ImagePicker from "expo-image-picker";
 import { SymbolView } from "expo-symbols";
@@ -35,13 +35,16 @@ import { colors, spacing, radius, typography } from "../theme";
 /* ── helpers ──────────────────────────────────────────────────────────────── */
 
 function toDateStr(d) {
-  return d.toISOString().slice(0, 10);
+  const y = d.getFullYear();
+  const m = String(d.getMonth() + 1).padStart(2, "0");
+  const day = String(d.getDate()).padStart(2, "0");
+  return `${y}-${m}-${day}`;
 }
 
 function offsetDay(dateStr, n) {
   const d = new Date(`${dateStr}T12:00:00`);
   d.setDate(d.getDate() + n);
-  return d.toISOString().slice(0, 10);
+  return toDateStr(d);
 }
 
 function formatDateLabel(dateStr) {
@@ -154,6 +157,7 @@ export default function Index() {
   const [saveMealModalVisible, setSaveMealModalVisible] = useState(false);
   const [savedMealName, setSavedMealName] = useState("");
   const [pendingSavedMeal, setPendingSavedMeal] = useState(null);
+  const [cameraMenuVisible, setCameraMenuVisible] = useState(false);
 
   const { width } = useWindowDimensions();
   const inputRef = useRef(null);
@@ -367,22 +371,23 @@ export default function Index() {
     }
   }, [addImageEntry]);
 
+  const closeCameraMenu = useCallback(() => setCameraMenuVisible(false), []);
+
+  const handleCameraMenuAction = useCallback((action) => {
+    setCameraMenuVisible(false);
+    // Small delay so modal dismisses before launching picker
+    setTimeout(() => {
+      if (action === "scan") {
+        Alert.alert("Scan Menu", "Menu scanning coming soon!");
+      } else {
+        void handlePickImage(action);
+      }
+    }, 200);
+  }, [handlePickImage]);
+
   const handleOpenCamera = useCallback(() => {
     if (Platform.OS === "ios") {
-      ActionSheetIOS.showActionSheetWithOptions(
-        {
-          options: ["Cancelar", "Choose from Library", "Take Photo"],
-          cancelButtonIndex: 0,
-        },
-        (buttonIndex) => {
-          if (buttonIndex === 1) {
-            void handlePickImage("library");
-          }
-          if (buttonIndex === 2) {
-            void handlePickImage("camera");
-          }
-        },
-      );
+      setCameraMenuVisible(true);
       return;
     }
 
@@ -514,35 +519,41 @@ export default function Index() {
       <StatusBar style="light" />
 
       {/* ── Header ──────────────────────────────────────────────────────── */}
-      <View style={[styles.header, { paddingTop: insets.top + 12 }]}>
-        {/* Logo */}
-        <Text style={styles.logo}>🥗</Text>
+      <View style={[styles.header, { paddingTop: insets.top + 10 }]}>
+        {/* Left column — fixed width to match right */}
+        <View style={styles.headerSide}>
+          <Text style={styles.logo}>🥗</Text>
+        </View>
 
-        {/* Date pill */}
-        <TouchableOpacity onPress={openCalendar} activeOpacity={0.7}>
-          <GlassView isInteractive style={[styles.datePill, glass("rgba(255,255,255,0.10)")]}>
-            <Text style={styles.dateLabel}>{dateLabel}</Text>
-          </GlassView>
-        </TouchableOpacity>
+        {/* Center: Date pill — true center via flex */}
+        <View style={styles.headerCenter}>
+          <TouchableOpacity onPress={openCalendar} activeOpacity={0.7}>
+            <GlassView isInteractive style={[styles.datePill, glass("rgba(255,255,255,0.10)")]}>
+              <Text style={styles.dateLabel}>{dateLabel}</Text>
+            </GlassView>
+          </TouchableOpacity>
+        </View>
 
-        {/* Streak + settings pill — same family as date pill */}
-        <TouchableOpacity onPress={openSettings} activeOpacity={0.7}>
-          <GlassView isInteractive style={[styles.rightPill, glass("rgba(255,255,255,0.10)")]}>
-            <Text style={styles.streakText}>🔥</Text>
-            <Text style={styles.streakCount}>1</Text>
-            <View style={styles.pillDivider} />
-            {Platform.OS === "ios" ? (
-              <SymbolView
-                name="gear"
-                style={styles.gearSymbol}
-                type="monochrome"
-                tintColor={colors.textSecondary}
-              />
-            ) : (
-              <Text style={styles.gearIcon}>⚙</Text>
-            )}
-          </GlassView>
-        </TouchableOpacity>
+        {/* Right column — fixed width to match left */}
+        <View style={styles.headerSide}>
+          <TouchableOpacity onPress={openSettings} activeOpacity={0.7} style={styles.headerSideRight}>
+            <GlassView isInteractive style={[styles.rightPill, glass("rgba(255,255,255,0.10)")]}>
+              <Text style={styles.streakText}>🔥</Text>
+              <Text style={styles.streakCount}>1</Text>
+              <View style={styles.pillDivider} />
+              {Platform.OS === "ios" ? (
+                <SymbolView
+                  name="gear"
+                  style={styles.gearSymbol}
+                  type="monochrome"
+                  tintColor={colors.textSecondary}
+                />
+              ) : (
+                <Text style={styles.gearIcon}>⚙</Text>
+              )}
+            </GlassView>
+          </TouchableOpacity>
+        </View>
       </View>
 
       {/* ── Content ─────────────────────────────────────────────────────── */}
@@ -641,10 +652,15 @@ export default function Index() {
         <AnimatePresence>
           {goalsExpanded && !keyboardVisible && (
             <MotiView
-              from={{ opacity: 0, translateY: 16 }}
-              animate={{ opacity: 1, translateY: 0 }}
-              exit={{ opacity: 0, translateY: 16 }}
-              transition={{ type: "timing", duration: 220 }}
+              from={{ opacity: 0, translateY: 20, scale: 0.97 }}
+              animate={{ opacity: 1, translateY: 0, scale: 1 }}
+              exit={{ opacity: 0, translateY: 12, scale: 0.98 }}
+              transition={{
+                type: "spring",
+                damping: 20,
+                stiffness: 180,
+                mass: 0.8,
+              }}
             >
               <GoalsPanel totals={totals} />
             </MotiView>
@@ -665,6 +681,81 @@ export default function Index() {
           onStartEditing={handleStartEditing}
         />
       </KeyboardAvoidingView>
+
+      {/* ── Camera context menu ────────────────────────────────────────── */}
+      <Modal
+        visible={cameraMenuVisible}
+        transparent
+        animationType="fade"
+        onRequestClose={closeCameraMenu}
+      >
+        <View style={styles.cameraMenuOverlay}>
+          <TouchableOpacity
+            style={StyleSheet.absoluteFill}
+            activeOpacity={1}
+            onPress={closeCameraMenu}
+          />
+          <View style={styles.cameraMenuAnchor}>
+            <GlassView style={[styles.cameraMenu, glass("rgba(40,40,40,0.92)")]}>
+
+              <TouchableOpacity
+                style={styles.cameraMenuItem}
+                activeOpacity={0.6}
+                onPress={() => handleCameraMenuAction("scan")}
+              >
+                {Platform.OS === "ios" ? (
+                  <SymbolView
+                    name="doc.text.viewfinder"
+                    style={styles.cameraMenuSymbol}
+                    tintColor={colors.accentBlue}
+                  />
+                ) : (
+                  <Text style={[styles.cameraMenuSymbol, { fontSize: 18, textAlign: "center" }]}>📄</Text>
+                )}
+                <Text style={styles.cameraMenuLabel}>Scan Menu</Text>
+              </TouchableOpacity>
+
+              <View style={styles.cameraMenuSep} />
+
+              <TouchableOpacity
+                style={styles.cameraMenuItem}
+                activeOpacity={0.6}
+                onPress={() => handleCameraMenuAction("library")}
+              >
+                {Platform.OS === "ios" ? (
+                  <SymbolView
+                    name="photo.on.rectangle"
+                    style={styles.cameraMenuSymbol}
+                    tintColor={colors.accentGreen}
+                  />
+                ) : (
+                  <Text style={[styles.cameraMenuSymbol, { fontSize: 18, textAlign: "center" }]}>🖼️</Text>
+                )}
+                <Text style={styles.cameraMenuLabel}>Choose from Library</Text>
+              </TouchableOpacity>
+
+              <View style={styles.cameraMenuSep} />
+
+              <TouchableOpacity
+                style={styles.cameraMenuItem}
+                activeOpacity={0.6}
+                onPress={() => handleCameraMenuAction("camera")}
+              >
+                {Platform.OS === "ios" ? (
+                  <SymbolView
+                    name="camera"
+                    style={styles.cameraMenuSymbol}
+                    tintColor={colors.accentPink}
+                  />
+                ) : (
+                  <Text style={[styles.cameraMenuSymbol, { fontSize: 18, textAlign: "center" }]}>📷</Text>
+                )}
+                <Text style={styles.cameraMenuLabel}>Take Photo</Text>
+              </TouchableOpacity>
+            </GlassView>
+          </View>
+        </View>
+      </Modal>
 
       {/* ── Calendar sheet ──────────────────────────────────────────────── */}
       <BottomSheet
@@ -862,7 +953,7 @@ export default function Index() {
         onRequestClose={() => setSettingsView("main")}
       >
         <View style={styles.modalBackdrop}>
-          <View style={[styles.modalCard, styles.managerCard]}>
+          <GlassView isInteractive={false} style={[styles.modalCard, styles.managerCard, glass("rgba(255,255,255,0.09)")]}>
             <View style={styles.managerHeader}>
               <TouchableOpacity
                 onPress={() => setSettingsView("main")}
@@ -895,7 +986,7 @@ export default function Index() {
                 </View>
               ) : (
                 savedMeals.map((meal) => (
-                  <View key={meal.id} style={styles.savedMealCard}>
+                  <GlassView isInteractive key={meal.id} style={[styles.savedMealCard, glass("rgba(255,255,255,0.06)")]}>
                     <View style={styles.savedMealHeader}>
                       <Text style={styles.savedMealName}>{meal.name}</Text>
                       <TouchableOpacity
@@ -911,11 +1002,11 @@ export default function Index() {
                       {" "}C {Math.round(meal.carbs_g)}g · F {Math.round(meal.fat_g)}g
                     </Text>
                     <Text style={styles.savedMealItems}>{meal.items}</Text>
-                  </View>
+                  </GlassView>
                 ))
               )}
             </ScrollView>
-          </View>
+          </GlassView>
         </View>
       </Modal>
 
@@ -929,7 +1020,7 @@ export default function Index() {
         }}
       >
         <View style={styles.modalBackdrop}>
-          <View style={styles.modalCard}>
+          <GlassView isInteractive={false} style={[styles.modalCard, glass("rgba(255,255,255,0.09)")]}>
             <Text style={styles.modalTitle}>Save meal</Text>
             <Text style={styles.modalDescription}>
               Escolha o nome que o usuario vai digitar depois no chat.
@@ -972,7 +1063,7 @@ export default function Index() {
                 <Text style={styles.modalPrimaryText}>Salvar</Text>
               </TouchableOpacity>
             </View>
-          </View>
+          </GlassView>
         </View>
       </Modal>
     </View>
@@ -992,8 +1083,18 @@ const styles = StyleSheet.create({
     justifyContent: "space-between",
     paddingHorizontal: spacing.xl,
     paddingBottom: spacing.md,
+    position: "relative",
   },
   logo: { fontSize: 28 },
+  datePillCenter: {
+    position: "absolute",
+    left: 0,
+    right: 0,
+    top: 0,
+    bottom: 0,
+    alignItems: "center",
+    justifyContent: "center",
+  },
 
   /* Date pill */
   datePill: {
@@ -1076,7 +1177,7 @@ const styles = StyleSheet.create({
   },
 
   /* Bottom sheets */
-  sheetBg:     { backgroundColor: colors.bgSecondary },
+  sheetBg:     { backgroundColor: "rgba(30,30,30,0.92)", borderTopLeftRadius: radius.xl, borderTopRightRadius: radius.xl },
   sheetHandle: { backgroundColor: colors.systemGray3 },
 
   /* Calendar sheet */
@@ -1105,9 +1206,9 @@ const styles = StyleSheet.create({
     width: "100%",
     borderRadius: radius.xl,
     padding: spacing.xl,
-    backgroundColor: colors.bgSecondary,
     borderWidth: StyleSheet.hairlineWidth,
-    borderColor: "rgba(255,255,255,0.08)",
+    borderColor: colors.glassBorder,
+    overflow: "hidden",
   },
   managerCard: {
     maxHeight: "78%",
@@ -1159,9 +1260,9 @@ const styles = StyleSheet.create({
   savedMealCard: {
     borderRadius: radius.lg,
     padding: spacing.lg,
-    backgroundColor: "rgba(255,255,255,0.06)",
+    overflow: "hidden",
     borderWidth: StyleSheet.hairlineWidth,
-    borderColor: "rgba(255,255,255,0.08)",
+    borderColor: "rgba(255,255,255,0.12)",
   },
   savedMealHeader: {
     flexDirection: "row",
@@ -1249,6 +1350,49 @@ const styles = StyleSheet.create({
     color: "#000",
     fontWeight: "700",
   },
+
+  /* Camera context menu */
+  cameraMenuOverlay: {
+    flex: 1,
+  },
+  cameraMenuAnchor: {
+    position: "absolute",
+    bottom: spacing.xl + 60,
+    right: spacing.xl,
+  },
+  cameraMenu: {
+    borderRadius: radius.xl,
+    overflow: "hidden",
+    minWidth: 240,
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: colors.glassBorder,
+    shadowColor: "#000",
+    shadowOffset: { width: 0, height: 8 },
+    shadowOpacity: 0.35,
+    shadowRadius: 20,
+    elevation: 8,
+  },
+  cameraMenuItem: {
+    flexDirection: "row",
+    alignItems: "center",
+    paddingHorizontal: spacing.lg + 2,
+    paddingVertical: spacing.md + 2,
+    gap: spacing.md,
+  },
+  cameraMenuSep: {
+    height: StyleSheet.hairlineWidth,
+    backgroundColor: "rgba(255,255,255,0.08)",
+    marginHorizontal: spacing.md,
+  },
+  cameraMenuLabel: {
+    ...typography.body,
+    color: colors.textPrimary,
+    fontWeight: "500",
+  },
+  cameraMenuSymbol: {
+    width: 22,
+    height: 22,
+  },
 });
 
 /* ── settings styles ───────────────────────────────────────────────────────── */
@@ -1314,23 +1458,22 @@ const sS = StyleSheet.create({
     width: 48, height: 28, borderRadius: 14,
     backgroundColor: "rgba(120,120,128,0.32)",
     borderWidth: StyleSheet.hairlineWidth,
-    borderColor: "rgba(255,255,255,0.14)",
+    borderColor: "rgba(255,255,255,0.08)",
     justifyContent: "center",
     paddingHorizontal: 2,
     flexShrink: 0,
   },
   toggleOn: {
     backgroundColor: colors.accentGreen,
-    borderColor: "rgba(255,255,255,0.22)",
+    borderColor: "rgba(255,255,255,0.12)",
   },
   thumb: {
     width: 24, height: 24, borderRadius: 12,
     backgroundColor: "#ffffff",
-    // Stronger shadow — thumb "floats" above the glass track
     shadowColor: "#000",
     shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.38,
-    shadowRadius: 5,
+    shadowOpacity: 0.25,
+    shadowRadius: 4,
     elevation: 3,
   },
   thumbOn: { transform: [{ translateX: 20 }] },
