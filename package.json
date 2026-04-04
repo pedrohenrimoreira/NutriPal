@@ -1,5 +1,5 @@
 {
-  "name": "nutrilens-workspace",
+  "name": "nutripal-workspace",
   "private": true,
   "scripts": {
     "mobile:start": "npm --prefix mobile run start",

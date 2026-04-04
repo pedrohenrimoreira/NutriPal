@@ -1,4 +1,4 @@
-# NutriLens
+# NutriPal
 
 Diário nutricional com visão computacional — entrada por texto livre ou foto do prato.
 
@@ -6,7 +6,6 @@ Diário nutricional com visão computacional — entrada por texto livre ou foto
 
 - **`mobile/`** — App principal (Expo + React Native, com suporte web via Metro)
 - **`backend/`** — API FastAPI para pipeline de visão e parsing nutricional
-- **`frontend/`** — PWA React (ignorar — foco está no mobile)
 
 ## Workflows
 
@@ -24,8 +23,8 @@ cd backend && uvicorn main:app --host 0.0.0.0 --port 8000
 
 - **Framework:** Expo SDK 54 + React Native
 - **Roteamento:** expo-router (file-based, em `src/app/`)
-- **State:** React Context + AsyncStorage
-- **Estilo:** Tailwind (via NativeWind) + StyleSheet
+- **State:** React Context + Zustand + AsyncStorage
+- **Estilo:** NativeWind (Tailwind) + StyleSheet
 - **Web:** Metro bundler com polyfills customizados em `polyfills/`
 - **Entry web:** `index.web.tsx`
 - **Entry nativo:** `index.tsx`

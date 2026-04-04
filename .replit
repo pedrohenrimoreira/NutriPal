@@ -60,4 +60,4 @@ externalPort = 8081
 [deployment]
 deploymentTarget = "autoscale"
 run = ["bash", "-c", "cd backend && uvicorn main:app --host 0.0.0.0 --port 5000"]
-build = ["bash", "-c", "cd frontend && npm install && npm run build"]
+build = ["bash", "-c", "echo 'Mobile app is built via EAS Build, not Replit deployment.'"]

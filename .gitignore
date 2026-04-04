@@ -26,9 +26,6 @@ backend/data/weights/*.ckpt
 .claude/
 tools/
 
-# Local tunnel logs
-frontend/.cloudflared*.log
-frontend/.mobile-tunnel/
 mobile/.expo/
 mobile/.expo-start-*.log
 mobile/.expo-export-check*/

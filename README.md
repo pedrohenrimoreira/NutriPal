@@ -1,16 +1,39 @@
-# NutriLens
+# NutriPal
 
-NutriLens e um diario nutricional com tres formas de entrada:
+Diário nutricional inteligente com visão computacional. Entrada por texto livre, voz ou foto do prato.
 
-1. Texto livre
-2. Foto do prato
-3. Barcode (futuro)
+## Arquitetura
 
-Este repositorio esta em formato de scaffold. O objetivo e documentar arquitetura, contratos e pontos de extensao. A logica de negocio ainda nao foi implementada.
+O projeto segue uma arquitetura **mobile-first** com backend separado:
+
+```
+NutriPal/
+├── mobile/    # App principal — Expo + React Native
+└── backend/   # API — FastAPI + pipeline de visão
+```
+
+### Mobile (Expo)
+
+App nativo com suporte a web via Metro bundler.
+
+- **Framework:** Expo SDK 54 + React Native 0.81
+- **Roteamento:** expo-router (file-based)
+- **State:** Zustand + AsyncStorage
+- **UI:** NativeWind (Tailwind) + StyleSheet + Liquid Glass
+- **Funcionalidades:** Journal diário, estimativa nutricional local, voz, câmera, calendário, refeições salvas
+
+### Backend (FastAPI)
+
+API para parsing nutricional via LLM e pipeline de visão computacional.
+
+- **Framework:** FastAPI + Uvicorn + Pydantic
+- **Processamento:** Pillow, NumPy, OpenCV
+- **Busca fuzzy:** RapidFuzz (dataset local)
+- **Rotas:** `GET /health`, `POST /parse/text`, `POST /parse/image`
 
 ## Filosofia do produto
 
-- Alimentos comuns devem ser resolvidos localmente (sem custo de API).
+- Alimentos comuns sao resolvidos localmente (sem custo de API).
 - Escalonamento por camada so quando necessario.
 - Pipeline de foto e o diferencial tecnico.
 
@@ -19,9 +42,8 @@ Este repositorio esta em formato de scaffold. O objetivo e documentar arquitetur
 ### Camada 0: dataset local (custo zero)
 
 - TACO (UNICAMP)
-- USDA FoodData Central (SQLite local)
-- Open Food Facts (base para barcode)
-- Busca fuzzy: `Fuse.js` no frontend e `rapidfuzz` no backend
+- USDA FoodData Central
+- Busca fuzzy no mobile (`nutrition.js`) e no backend (`rapidfuzz`)
 
 ### Camada 1: LLM barato para texto simples
 
@@ -45,71 +67,23 @@ Este repositorio esta em formato de scaffold. O objetivo e documentar arquitetur
 7. Validacao visual final por LLM com visao
 8. Resultado com intervalo de confianca
 
-## Fluxo de dados (alto nivel)
-
-1. Usuario envia texto ou foto.
-2. Frontend aplica roteamento (`services/nutritionRouter.ts`).
-3. Camada 0 tenta resolver primeiro.
-4. Itens nao resolvidos sobem para parser textual no backend.
-5. Foto executa pipeline completo no backend.
-6. Resultado consolidado retorna em `ParseResponse`.
-7. Frontend persiste em Zustand + IndexedDB (Dexie).
-
-## Estrutura do projeto
-
-- `frontend/`: React 18 + TypeScript + Vite + PWA + Tailwind + Zustand + Dexie.
-- `backend/`: FastAPI + contratos Pydantic + stubs de pipeline de visao.
-
-## Variaveis de ambiente
-
-- Frontend: `frontend/.env.example`
-- Backend: `backend/.env.example`
-- Monorepo (opcional): `.env.example`
-
 ## Como executar
 
-### Frontend (PWA)
+### Mobile (Expo)
 
 ```bash
-cd frontend
+cd mobile
 npm install
-npm run dev          # abre em localhost:5173
-npm run build        # build de producao
-npm run preview      # preview do build
+npx expo start          # Expo DevTools
+npx expo start --web    # versao web (Metro)
 ```
-
-### Teste no celular (HTTPS + microfone)
-
-Use este workflow para gerar um link HTTPS publico rapidamente:
-
-```bash
-# na raiz do projeto
-npm run mobile:test
-```
-
-O script:
-- sobe/reaproveita o Vite em `0.0.0.0:5173`
-- sobe um Cloudflare Tunnel com host-header correto para Vite
-- imprime e copia o link `https://...trycloudflare.com`
-
-Comandos auxiliares:
-
-```bash
-# parar so o tunel
-npm run mobile:stop
-
-# parar tunel + vite
-npm run mobile:stop:all
-```
-
-Observacao: para iPhone, abra o link no Safari e permita acesso ao microfone.
 
 ### Backend (FastAPI)
 
 ```bash
 cd backend
 python -m venv venv
-source venv/bin/activate   # Windows: venv\\Scripts\\activate
+source venv/bin/activate   # Windows: venv\Scripts\activate
 pip install -r requirements.txt
 uvicorn main:app --reload  # abre em localhost:8000
 ```
@@ -126,16 +100,13 @@ Arquivos esperados:
 - `yolo11_food.pt` (ou `yolo11n.pt` como base)
 - `depth_anything_v2_vitl.pth`
 
-## O que este scaffold NAO implementa
+## Variaveis de ambiente
 
-- Logica de negocio real
-- Chamadas reais de API para LLM
-- Carregamento real de modelos
-- Autenticacao de usuario
-- Banco de dados de producao
+- Backend: `backend/.env.example`
+- Monorepo: `.env.example`
 
-## Convencoes de implementacao para a proxima fase
+## Convencoes de implementacao
 
-- Funcoes de servico permanecem com stubs e `TODO`.
-- Contratos de tipos e schemas sao a fonte de verdade.
+- Contratos de tipos e schemas Pydantic sao a fonte de verdade.
 - Cada modulo de pipeline deve continuar desacoplado por interface.
+- O mobile resolve alimentos localmente (Camada 0) antes de escalar para a API.
