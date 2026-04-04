@@ -1,62 +1,44 @@
 # NutriLens
 
-A nutritional diary Progressive Web App (PWA) for tracking food intake via free-text input and plate photography.
+Diário nutricional com visão computacional — entrada por texto livre ou foto do prato.
 
-## Architecture
+## Estrutura
 
-This is a monorepo with separate frontend and backend:
+- **`mobile/`** — App principal (Expo + React Native, com suporte web via Metro)
+- **`backend/`** — API FastAPI para pipeline de visão e parsing nutricional
+- **`frontend/`** — PWA React (ignorar — foco está no mobile)
 
-- **`frontend/`** — React 18 + Vite PWA (TypeScript, Tailwind CSS, Zustand, Dexie/IndexedDB)
-- **`backend/`** — FastAPI (Python) serving a computer vision and LLM-based nutrition pipeline
+## Workflows
 
-## Running the App
-
-### Frontend (port 5000)
+### Start application (porta 5000 — webview)
 ```bash
-cd frontend && npm run dev
+cd mobile && CI=1 npx expo start --web --port 5000
 ```
-Configured as the "Start application" workflow on port 5000.
 
-### Backend (port 8000)
+### Backend API (porta 8000)
 ```bash
 cd backend && uvicorn main:app --host 0.0.0.0 --port 8000
 ```
-Configured as the "Backend API" workflow on port 8000.
 
-The frontend proxies `/api/*` requests to the backend via Vite's proxy config.
+## Mobile (Expo)
 
-## Key Files
+- **Framework:** Expo SDK 54 + React Native
+- **Roteamento:** expo-router (file-based, em `src/app/`)
+- **State:** React Context + AsyncStorage
+- **Estilo:** Tailwind (via NativeWind) + StyleSheet
+- **Web:** Metro bundler com polyfills customizados em `polyfills/`
+- **Entry web:** `index.web.tsx`
+- **Entry nativo:** `index.tsx`
 
-- `frontend/vite.config.ts` — Vite config (proxy, host, port, PWA)
-- `frontend/src/App.tsx` — Main React app entry point
-- `frontend/src/store/journalStore.ts` — Zustand state management
-- `frontend/src/services/nutritionRouter.ts` — Routes queries to local dataset, text API, or image API
-- `backend/main.py` — FastAPI app entry point (CORS, routes)
-- `backend/api/routes/` — health, text parsing, image processing endpoints
-- `backend/pipeline/orchestrator.py` — Computer vision pipeline coordination
+## Backend (FastAPI)
 
-## Dependencies
+- FastAPI + Uvicorn
+- Pillow, NumPy, OpenCV (processamento de imagem)
+- RapidFuzz (busca fuzzy em dataset nutricional)
+- Rotas: `/health`, `/parse/text`, `/parse/image`
 
-### Frontend
-- React 18, Vite, TypeScript, Tailwind CSS
-- Zustand (state), Dexie (IndexedDB), Fuse.js (fuzzy search)
-- vite-plugin-pwa (PWA support)
+## Arquitetura de análise nutricional
 
-### Backend
-- FastAPI, Uvicorn, Pydantic
-- Pillow, NumPy, OpenCV (image processing)
-- RapidFuzz (fuzzy search for nutritional datasets)
-- Optional (commented out): Ultralytics YOLOv11, SAM 2, Google Generative AI, Anthropic
-
-## Deployment
-
-Configured for autoscale deployment:
-- **Build:** `cd frontend && npm install && npm run build`
-- **Run:** `cd backend && uvicorn main:app --host 0.0.0.0 --port 5000`
-
-## Architecture Notes
-
-The nutrition analysis uses a layered approach:
-- **Layer 0:** Local TACO/USDA dataset lookup (zero-cost)
-- **Layer 1-2:** LLM-based parsing (Claude/Gemini) for text descriptions
-- **Layer 3:** Computer vision pipeline (YOLOv11 + SAM 2 + Depth Anything V2) for photo analysis
+- **Camada 0:** Dataset local TACO/USDA (custo zero, busca fuzzy)
+- **Camada 1-2:** LLMs (Claude/Gemini) para texto
+- **Camada 3:** Pipeline de visão computacional (YOLOv11 + SAM 2 + Depth Anything V2)
