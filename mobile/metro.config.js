@@ -54,6 +54,7 @@ const NATIVE_ALIASES = {
 };
 const SHARED_ALIASES = {
   'expo-image': path.resolve(__dirname, './polyfills/shared/expo-image.tsx'),
+  'expo-speech-recognition': path.resolve(__dirname, './polyfills/shared/expo-speech-recognition.ts'),
 };
 fs.mkdirSync(VIRTUAL_ROOT_UNRESOLVED, { recursive: true });
 config.watchFolders = [...config.watchFolders, VIRTUAL_ROOT, VIRTUAL_ROOT_UNRESOLVED];
