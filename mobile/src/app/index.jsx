@@ -1,0 +1,1480 @@
+/**
+ * Main Journal Screen
+ *
+ * UX intent:
+ *   Write → interpret → update the day.
+ *   No Save/Cancel. The entry lives inline on the daily page.
+ *   Bottom nutrition bar tap → expands goals panel with smooth animation.
+ */
+import React, {
+  useState, useRef, useCallback, useMemo, useEffect,
+} from "react";
+import {
+  View, Text, TextInput, TouchableOpacity, ScrollView,
+  KeyboardAvoidingView, Platform, StyleSheet, Keyboard, LayoutAnimation,
+  useWindowDimensions, Modal, Alert,
+} from "react-native";
+import * as ImagePicker from "expo-image-picker";
+import { SymbolView } from "expo-symbols";
+import { GlassView, isLiquidGlassAvailable } from "expo-glass-effect";
+import { useSafeAreaInsets } from "react-native-safe-area-context";
+import { StatusBar } from "expo-status-bar";
+import BottomSheet, { BottomSheetView, BottomSheetScrollView } from "@gorhom/bottom-sheet";
+import { Calendar } from "react-native-calendars";
+import { AnimatePresence, MotiView } from "moti";
+
+import { useJournalStore, useDailyTotals, getEntriesForDate } from "../store/journalStore";
+import { useSettingsStore } from "../store/settingsStore";
+import { estimateNutritionFromText } from "../utils/nutrition";
+import { useSpeechRecognition } from "../hooks/useSpeechRecognition";
+import { MealEntryCard } from "../components/journal/MealEntryCard";
+import { ActionBar } from "../components/journal/ActionBar";
+import { GoalsPanel } from "../components/journal/GoalsPanel";
+import { colors, spacing, radius, typography } from "../theme";
+
+/* ── helpers ──────────────────────────────────────────────────────────────── */
+
+function toDateStr(d) {
+  const y = d.getFullYear();
+  const m = String(d.getMonth() + 1).padStart(2, "0");
+  const day = String(d.getDate()).padStart(2, "0");
+  return `${y}-${m}-${day}`;
+}
+
+function offsetDay(dateStr, n) {
+  const d = new Date(`${dateStr}T12:00:00`);
+  d.setDate(d.getDate() + n);
+  return toDateStr(d);
+}
+
+function formatDateLabel(dateStr) {
+  const today = toDateStr(new Date());
+  const yesterday = toDateStr(new Date(Date.now() - 86400000));
+  if (dateStr === today) return "Today";
+  if (dateStr === yesterday) return "Yesterday";
+  const d = new Date(`${dateStr}T12:00:00`);
+  return d.toLocaleDateString("en-US", { day: "numeric", month: "short" });
+}
+
+function formatMonthYear(dateStr) {
+  const d = new Date(`${dateStr}T12:00:00`);
+  return d.toLocaleDateString("en-US", { month: "short", year: "numeric" });
+}
+
+const glass = (fallback) =>
+  isLiquidGlassAvailable() ? {} : { backgroundColor: fallback };
+
+/* ── settings sub-components ─────────────────────────────────────────────── */
+
+function IconBadge({ color, icon }) {
+  // No container — just the glyph with fixed width for row alignment.
+  // Emoji colors are intrinsic; color prop used for text-only glyphs.
+  return (
+    <Text style={[sS.badgeIcon, { color }]}>{icon}</Text>
+  );
+}
+
+function NavRow({ badge, badgeColor, label, sublabel, value, onPress, isLast }) {
+  const content = (
+    <View style={[sS.row, isLast && sS.rowLast]}>
+      {badge ? <IconBadge color={badgeColor} icon={badge} /> : null}
+      <View style={sS.rowBody}>
+        <Text style={sS.rowLabel}>{label}</Text>
+        {sublabel ? <Text style={sS.rowSub}>{sublabel}</Text> : null}
+      </View>
+      {value ? <Text style={sS.rowVal}>{value}</Text> : null}
+      {onPress ? <Text style={sS.chevron}>›</Text> : null}
+    </View>
+  );
+  return onPress ? (
+    <TouchableOpacity onPress={onPress} activeOpacity={0.7}>{content}</TouchableOpacity>
+  ) : content;
+}
+
+function ToggleRow({ badge, badgeColor, label, value, onToggle, isLast }) {
+  return (
+    <View style={[sS.row, isLast && sS.rowLast]}>
+      {badge ? <IconBadge color={badgeColor} icon={badge} /> : null}
+      <View style={sS.rowBody}>
+        <Text style={sS.rowLabel}>{label}</Text>
+      </View>
+      <TouchableOpacity
+        onPress={onToggle} activeOpacity={0.8}
+        style={[sS.toggle, value && sS.toggleOn]}
+      >
+        <View style={[sS.thumb, value && sS.thumbOn]} />
+      </TouchableOpacity>
+    </View>
+  );
+}
+
+function Card({ children }) {
+  return (
+    <GlassView
+      isInteractive={false}
+      style={[sS.card, glass("rgba(255,255,255,0.07)")]}
+    >
+      {children}
+    </GlassView>
+  );
+}
+
+function SectionTitle({ title }) {
+  return <Text style={sS.sectionTitle}>{title}</Text>;
+}
+
+/* ── main screen ─────────────────────────────────────────────────────────── */
+
+export default function Index() {
+  const {
+    entries,
+    selectedDate,
+    setDate,
+    addTextEntry,
+    addImageEntry,
+  } = useJournalStore();
+  const totals = useDailyTotals(entries);
+  const savedMeals = useSettingsStore((state) => state.savedMeals);
+  const addSavedMeal = useSettingsStore((state) => state.addSavedMeal);
+  const removeSavedMeal = useSettingsStore((state) => state.removeSavedMeal);
+  const insets = useSafeAreaInsets();
+  const {
+    isListening,
+    transcript,
+    error: speechError,
+    startListening,
+    stopListening,
+    clearTranscript,
+  } = useSpeechRecognition();
+
+  const [isEditing, setIsEditing] = useState(false);
+  const [text, setText] = useState("");
+  const [keyboardVisible, setKeyboardVisible] = useState(false);
+  const [goalsExpanded, setGoalsExpanded] = useState(false);
+  const [autoTimeZone, setAutoTimeZone] = useState(true);
+  const [reminders, setReminders] = useState(false);
+  const [settingsView, setSettingsView] = useState("main");
+  const [saveMealModalVisible, setSaveMealModalVisible] = useState(false);
+  const [savedMealName, setSavedMealName] = useState("");
+  const [pendingSavedMeal, setPendingSavedMeal] = useState(null);
+  const [cameraMenuVisible, setCameraMenuVisible] = useState(false);
+
+  const { width } = useWindowDimensions();
+  const inputRef = useRef(null);
+  const scrollRef = useRef(null);
+  const swipeRef = useRef(null);
+  const calSheetRef = useRef(null);
+  const settingsSheetRef = useRef(null);
+  const dictationBaseTextRef = useRef("");
+  const isListeningRef = useRef(isListening);
+
+  const prevDate = useMemo(() => offsetDay(selectedDate, -1), [selectedDate]);
+  const nextDate = useMemo(() => offsetDay(selectedDate, +1), [selectedDate]);
+
+  const todayStr = useMemo(() => toDateStr(new Date()), []);
+  const dateLabel = useMemo(() => formatDateLabel(selectedDate), [selectedDate]);
+  const monthYearLabel = useMemo(() => formatMonthYear(selectedDate), [selectedDate]);
+  const savedMealsLabel = useMemo(
+    () => `${savedMeals.length} saved meal${savedMeals.length !== 1 ? "s" : ""}`,
+    [savedMeals.length],
+  );
+
+  /* keyboard visibility --------------------------------------------------- */
+  useEffect(() => {
+    isListeningRef.current = isListening;
+  }, [isListening]);
+
+  useEffect(() => {
+    const willShow = Platform.OS === "ios" ? "keyboardWillShow" : "keyboardDidShow";
+    const willHide = Platform.OS === "ios" ? "keyboardWillHide" : "keyboardDidHide";
+    const didHide  = "keyboardDidHide";
+
+    // Show: mark visible + collapse goals immediately
+    const sL = Keyboard.addListener(willShow, () => {
+      LayoutAnimation.configureNext(LayoutAnimation.Presets.easeInEaseOut);
+      setKeyboardVisible(true);
+      setGoalsExpanded(false);
+    });
+
+    // willHide: hide GoalsPanel early (smooth, before keyboard finishes moving)
+    const wL = Platform.OS === "ios"
+      ? Keyboard.addListener(willHide, () => {
+          LayoutAnimation.configureNext(LayoutAnimation.Presets.easeInEaseOut);
+          setKeyboardVisible(false);
+        })
+      : null;
+
+    // didHide: reset editing state only after keyboard is fully gone
+    // Covers every dismiss path: gesture, system, tap-outside, button.
+    const dL = Keyboard.addListener(didHide, () => {
+      LayoutAnimation.configureNext(LayoutAnimation.Presets.easeInEaseOut);
+      setKeyboardVisible(false); // no-op on iOS (already false), needed on Android
+      if (!isListeningRef.current) {
+        setIsEditing(false);
+      }
+    });
+
+    return () => {
+      sL.remove();
+      wL?.remove();
+      dL.remove();
+    };
+  }, []);
+
+  /* re-center swiper whenever selectedDate changes (swipe or calendar pick) */
+  useEffect(() => {
+    swipeRef.current?.scrollTo({ x: width, animated: false });
+  }, [selectedDate, width]);
+
+  useEffect(() => {
+    if (!transcript) return;
+
+    const base = dictationBaseTextRef.current.trim();
+    const nextText = [base, transcript].filter(Boolean).join(" ").trim();
+    setText(nextText);
+
+    if (!isEditing) {
+      LayoutAnimation.configureNext(LayoutAnimation.Presets.easeInEaseOut);
+      setIsEditing(true);
+      setTimeout(() => inputRef.current?.focus(), 50);
+    }
+  }, [transcript, isEditing]);
+
+  /* handlers -------------------------------------------------------------- */
+  const handleDaySwipe = useCallback((e) => {
+    const x = e.nativeEvent.contentOffset.x;
+    if (x < width * 0.5) {
+      Keyboard.dismiss();
+      setIsEditing(false);
+      setText("");
+      setDate(offsetDay(selectedDate, -1));
+    } else if (x > width * 1.5) {
+      Keyboard.dismiss();
+      setIsEditing(false);
+      setText("");
+      setDate(offsetDay(selectedDate, +1));
+    }
+    // If user bounced back to center, no state change needed
+  }, [selectedDate, setDate, width]);
+
+  const handleStartEditing = useCallback(() => {
+    LayoutAnimation.configureNext(LayoutAnimation.Presets.easeInEaseOut);
+    setIsEditing(true);
+    setTimeout(() => inputRef.current?.focus(), 50);
+  }, []);
+
+  // Submit on Enter — no explicit Save button needed
+  const handleSubmit = useCallback(async () => {
+    if (isListening) {
+      stopListening();
+    }
+
+    const raw = text.trim();
+    if (!raw) {
+      Keyboard.dismiss();
+      setIsEditing(false);
+      return;
+    }
+
+    await addTextEntry(raw);
+    setText("");
+    clearTranscript();
+    dictationBaseTextRef.current = "";
+    Keyboard.dismiss();
+    setIsEditing(false);
+    setTimeout(() => scrollRef.current?.scrollToEnd({ animated: true }), 100);
+  }, [text, addTextEntry, clearTranscript, isListening, stopListening]);
+
+  const handleDismissKeyboard = useCallback(() => {
+    if (isListening) {
+      stopListening();
+    }
+    Keyboard.dismiss();
+    setIsEditing(false);
+  }, [isListening, stopListening]);
+
+  const handleToggleMic = useCallback(async () => {
+    if (isListening) {
+      stopListening();
+      return;
+    }
+
+    LayoutAnimation.configureNext(LayoutAnimation.Presets.easeInEaseOut);
+    setIsEditing(true);
+    setTimeout(() => inputRef.current?.focus(), 50);
+
+    dictationBaseTextRef.current = text.trim();
+    const started = await startListening();
+    if (!started) {
+      dictationBaseTextRef.current = "";
+    }
+  }, [isListening, startListening, stopListening, text]);
+
+  const handlePickImage = useCallback(async (source = "library") => {
+    try {
+      if (Platform.OS !== "web") {
+        const permission =
+          source === "camera"
+            ? await ImagePicker.requestCameraPermissionsAsync()
+            : await ImagePicker.requestMediaLibraryPermissionsAsync();
+
+        if (!permission?.granted) {
+          Alert.alert(
+            "Permissao necessaria",
+            source === "camera"
+              ? "Permita acesso a camera para anexar fotos no chat."
+              : "Permita acesso a biblioteca de fotos para anexar imagens no chat.",
+          );
+          return;
+        }
+      }
+
+      const picker =
+        source === "camera"
+          ? ImagePicker.launchCameraAsync
+          : ImagePicker.launchImageLibraryAsync;
+
+      const result = await picker({
+        mediaTypes: ["images"],
+        allowsEditing: false,
+        allowsMultipleSelection: false,
+        selectionLimit: 1,
+        quality: 1,
+        presentationStyle:
+          source === "library"
+            ? ImagePicker.UIImagePickerPresentationStyle.AUTOMATIC
+            : undefined,
+        cameraType:
+          source === "camera"
+            ? ImagePicker.CameraType.back
+            : undefined,
+      });
+
+      if (result.canceled || !result.assets?.length) {
+        return;
+      }
+
+      setIsEditing(false);
+      await addImageEntry({
+        ...result.assets[0],
+        source,
+      });
+      setTimeout(() => scrollRef.current?.scrollToEnd({ animated: true }), 100);
+    } catch (cameraError) {
+      Alert.alert(
+        source === "camera"
+          ? "Nao foi possivel abrir a camera"
+          : "Nao foi possivel abrir a biblioteca",
+        cameraError?.message ||
+          "Tente novamente e, se preciso, libere acesso nas configuracoes do aparelho.",
+      );
+    }
+  }, [addImageEntry]);
+
+  const closeCameraMenu = useCallback(() => setCameraMenuVisible(false), []);
+
+  const handleCameraMenuAction = useCallback((action) => {
+    setCameraMenuVisible(false);
+    // Small delay so modal dismisses before launching picker
+    setTimeout(() => {
+      if (action === "scan") {
+        Alert.alert("Scan Menu", "Menu scanning coming soon!");
+      } else {
+        void handlePickImage(action);
+      }
+    }, 200);
+  }, [handlePickImage]);
+
+  const handleOpenCamera = useCallback(() => {
+    if (Platform.OS === "ios") {
+      setCameraMenuVisible(true);
+      return;
+    }
+
+    if (Platform.OS === "android") {
+      Alert.alert(
+        "Adicionar imagem",
+        "Escolha de onde enviar a foto.",
+        [
+          { text: "Cancelar", style: "cancel" },
+          { text: "Biblioteca", onPress: () => void handlePickImage("library") },
+          { text: "Camera", onPress: () => void handlePickImage("camera") },
+        ],
+      );
+      return;
+    }
+
+    void handlePickImage("library");
+  }, [handlePickImage]);
+
+  const handleAddSavedMeal = useCallback(() => {
+    const currentText = text.trim();
+    const latestEntry = entries[entries.length - 1];
+    const sourceText =
+      currentText ||
+      latestEntry?.rawText?.trim() ||
+      latestEntry?.parsedResult?.items?.map((item) => item.name).join(", ") ||
+      "";
+
+    if (!sourceText) {
+      handleStartEditing();
+      Alert.alert(
+        "Nada para salvar",
+        "Digite uma refeicao primeiro para salvar como refeicao padrao.",
+      );
+      return;
+    }
+
+    const parsedResult =
+      currentText
+        ? estimateNutritionFromText(sourceText, savedMeals)
+        : latestEntry?.parsedResult ?? estimateNutritionFromText(sourceText, savedMeals);
+
+    const suggestedName =
+      sourceText.length > 40 ? `${sourceText.slice(0, 40).trim()}...` : sourceText;
+
+    setPendingSavedMeal({
+      items: sourceText,
+      totals: parsedResult.totals,
+    });
+    setSavedMealName(suggestedName);
+    setSaveMealModalVisible(true);
+  }, [entries, handleStartEditing, savedMeals, text]);
+
+  const handleConfirmSaveMeal = useCallback(() => {
+    const name = savedMealName.trim();
+    if (!name || !pendingSavedMeal) return;
+
+    addSavedMeal({
+      name,
+      items: pendingSavedMeal.items,
+      calories: pendingSavedMeal.totals.calories,
+      protein_g: pendingSavedMeal.totals.protein_g,
+      carbs_g: pendingSavedMeal.totals.carbs_g,
+      fat_g: pendingSavedMeal.totals.fat_g,
+    });
+
+    setSaveMealModalVisible(false);
+    setSavedMealName("");
+    setPendingSavedMeal(null);
+    Alert.alert("Saved meal criada", `"${name}" foi salva para reutilizar no chat.`);
+  }, [addSavedMeal, pendingSavedMeal, savedMealName]);
+
+  const handleDeleteSavedMeal = useCallback((meal) => {
+    Alert.alert(
+      "Excluir refeicao salva?",
+      `A refeicao "${meal.name}" sera removida da lista.`,
+      [
+        { text: "Cancelar", style: "cancel" },
+        {
+          text: "Excluir",
+          style: "destructive",
+          onPress: () => removeSavedMeal(meal.id),
+        },
+      ],
+    );
+  }, [removeSavedMeal]);
+
+  const handleToggleGoals = useCallback(() => setGoalsExpanded((v) => !v), []);
+
+  const openCalendar = useCallback(() => calSheetRef.current?.expand(), []);
+  const openSettings = useCallback(() => {
+    setSettingsView("main");
+    settingsSheetRef.current?.expand();
+  }, []);
+  const closeCalendar = useCallback(() => calSheetRef.current?.close(), []);
+  const closeSettings = useCallback(() => {
+    setSettingsView("main");
+    settingsSheetRef.current?.close();
+  }, []);
+
+  const markedDates = useMemo(() => {
+    const marks = {
+      [selectedDate]: {
+        selected: true,
+        selectedColor: colors.accentGreen,
+        selectedTextColor: "#000",
+      },
+    };
+    if (selectedDate !== todayStr) {
+      marks[todayStr] = {
+        marked: true,
+        dotColor: colors.accentPurple,
+        customStyles: {
+          container: {
+            borderWidth: 2,
+            borderColor: colors.accentPurple,
+            borderRadius: 18,
+          },
+          text: { color: colors.accentPurple, fontWeight: "600" },
+        },
+      };
+    }
+    return marks;
+  }, [selectedDate, todayStr]);
+
+  /* render ---------------------------------------------------------------- */
+  return (
+    <View style={styles.root}>
+      <StatusBar style="light" />
+
+      {/* ── Header ──────────────────────────────────────────────────────── */}
+      <View style={[styles.header, { paddingTop: insets.top + 10 }]}>
+        {/* Left column — fixed width to match right */}
+        <View style={styles.headerSide}>
+          <Text style={styles.logo}>🥗</Text>
+        </View>
+
+        {/* Center: Date pill — true center via flex */}
+        <View style={styles.headerCenter}>
+          <TouchableOpacity onPress={openCalendar} activeOpacity={0.7}>
+            <GlassView isInteractive style={[styles.datePill, glass("rgba(255,255,255,0.10)")]}>
+              <Text style={styles.dateLabel}>{dateLabel}</Text>
+            </GlassView>
+          </TouchableOpacity>
+        </View>
+
+        {/* Right column — fixed width to match left */}
+        <View style={styles.headerSide}>
+          <TouchableOpacity onPress={openSettings} activeOpacity={0.7} style={styles.headerSideRight}>
+            <GlassView isInteractive style={[styles.rightPill, glass("rgba(255,255,255,0.10)")]}>
+              <Text style={styles.streakText}>🔥</Text>
+              <Text style={styles.streakCount}>1</Text>
+              <View style={styles.pillDivider} />
+              {Platform.OS === "ios" ? (
+                <SymbolView
+                  name="gear"
+                  style={styles.gearSymbol}
+                  type="monochrome"
+                  tintColor={colors.textSecondary}
+                />
+              ) : (
+                <Text style={styles.gearIcon}>⚙</Text>
+              )}
+            </GlassView>
+          </TouchableOpacity>
+        </View>
+      </View>
+
+      {/* ── Content ─────────────────────────────────────────────────────── */}
+      <KeyboardAvoidingView
+        style={styles.flex}
+        behavior={Platform.OS === "ios" ? "padding" : "height"}
+        keyboardVerticalOffset={0}
+      >
+        {/* ── 3-page horizontal day swiper ────────────────────────────── */}
+        <ScrollView
+          ref={swipeRef}
+          horizontal
+          pagingEnabled
+          showsHorizontalScrollIndicator={false}
+          scrollEventThrottle={16}
+          scrollEnabled={!keyboardVisible}
+          onMomentumScrollEnd={handleDaySwipe}
+          keyboardShouldPersistTaps="handled"
+          style={styles.flex}
+          contentOffset={{ x: width, y: 0 }}
+        >
+          {[prevDate, selectedDate, nextDate].map((date, idx) => {
+            const isActive = idx === 1;
+            const dayEntries = isActive ? entries : getEntriesForDate(date);
+            return (
+              <ScrollView
+                key={date}
+                ref={isActive ? scrollRef : null}
+                style={{ width }}
+                contentContainerStyle={styles.scrollContent}
+                keyboardShouldPersistTaps="handled"
+                showsVerticalScrollIndicator={false}
+              >
+                {/* Listening badge — active page only */}
+                {isActive && isListening && (
+                  <View style={styles.listeningBadge}>
+                    <View style={styles.listeningDot} />
+                    <Text style={styles.listeningText}>Ouvindo…</Text>
+                  </View>
+                )}
+
+                {/* Text input — active page only */}
+                {isActive && speechError ? (
+                  <Text style={styles.errorText}>{speechError}</Text>
+                ) : null}
+
+                {isActive && isEditing ? (
+                  <TextInput
+                    ref={inputRef}
+                    value={text}
+                    onChangeText={setText}
+                    placeholder="O que você comeu?..."
+                    placeholderTextColor={colors.systemGray3}
+                    style={styles.inlineInput}
+                    multiline
+                    autoFocus
+                    returnKeyType="send"
+                    submitBehavior="submit"
+                    enablesReturnKeyAutomatically
+                    onSubmitEditing={() => {
+                      void handleSubmit();
+                    }}
+                    blurOnSubmit={false}
+                  />
+                ) : dayEntries.length === 0 ? (
+                  <TouchableOpacity
+                    onPress={isActive ? handleStartEditing : undefined}
+                    activeOpacity={isActive ? 0.5 : 1}
+                  >
+                    <Text style={styles.placeholder}>
+                      {isActive ? "Start logging your meals..." : "No entries for this day."}
+                    </Text>
+                  </TouchableOpacity>
+                ) : (
+                  <>
+                    {dayEntries.map((entry) => (
+                      <MealEntryCard key={entry.id} entry={entry} />
+                    ))}
+                    {isActive && (
+                      <TouchableOpacity
+                        onPress={handleStartEditing}
+                        style={styles.addMoreBtn}
+                        activeOpacity={0.5}
+                      >
+                        <Text style={styles.addMoreText}>+ Adicionar refeição</Text>
+                      </TouchableOpacity>
+                    )}
+                  </>
+                )}
+              </ScrollView>
+            );
+          })}
+        </ScrollView>
+
+        {/* ── GoalsPanel — animated, collapsed by default ─────────────── */}
+        <AnimatePresence>
+          {goalsExpanded && !keyboardVisible && (
+            <MotiView
+              from={{ opacity: 0, translateY: 20, scale: 0.97 }}
+              animate={{ opacity: 1, translateY: 0, scale: 1 }}
+              exit={{ opacity: 0, translateY: 12, scale: 0.98 }}
+              transition={{
+                type: "spring",
+                damping: 20,
+                stiffness: 180,
+                mass: 0.8,
+              }}
+            >
+              <GoalsPanel totals={totals} />
+            </MotiView>
+          )}
+        </AnimatePresence>
+
+        {/* ── ActionBar ───────────────────────────────────────────────── */}
+        <ActionBar
+          totals={totals}
+          isEditing={isEditing}
+          isListening={isListening}
+          goalsExpanded={goalsExpanded}
+          onToggleGoals={handleToggleGoals}
+          onToggleMic={handleToggleMic}
+          onOpenCamera={handleOpenCamera}
+          onAddSavedMeal={handleAddSavedMeal}
+          onDismissKeyboard={handleDismissKeyboard}
+          onStartEditing={handleStartEditing}
+        />
+      </KeyboardAvoidingView>
+
+      {/* ── Camera context menu ────────────────────────────────────────── */}
+      <Modal
+        visible={cameraMenuVisible}
+        transparent
+        animationType="fade"
+        onRequestClose={closeCameraMenu}
+      >
+        <View style={styles.cameraMenuOverlay}>
+          <TouchableOpacity
+            style={StyleSheet.absoluteFill}
+            activeOpacity={1}
+            onPress={closeCameraMenu}
+          />
+          <View style={styles.cameraMenuAnchor}>
+            <GlassView style={[styles.cameraMenu, glass("rgba(40,40,40,0.92)")]}>
+
+              <TouchableOpacity
+                style={styles.cameraMenuItem}
+                activeOpacity={0.6}
+                onPress={() => handleCameraMenuAction("scan")}
+              >
+                {Platform.OS === "ios" ? (
+                  <SymbolView
+                    name="doc.text.viewfinder"
+                    style={styles.cameraMenuSymbol}
+                    tintColor={colors.accentBlue}
+                  />
+                ) : (
+                  <Text style={[styles.cameraMenuSymbol, { fontSize: 18, textAlign: "center" }]}>📄</Text>
+                )}
+                <Text style={styles.cameraMenuLabel}>Scan Menu</Text>
+              </TouchableOpacity>
+
+              <View style={styles.cameraMenuSep} />
+
+              <TouchableOpacity
+                style={styles.cameraMenuItem}
+                activeOpacity={0.6}
+                onPress={() => handleCameraMenuAction("library")}
+              >
+                {Platform.OS === "ios" ? (
+                  <SymbolView
+                    name="photo.on.rectangle"
+                    style={styles.cameraMenuSymbol}
+                    tintColor={colors.accentGreen}
+                  />
+                ) : (
+                  <Text style={[styles.cameraMenuSymbol, { fontSize: 18, textAlign: "center" }]}>🖼️</Text>
+                )}
+                <Text style={styles.cameraMenuLabel}>Choose from Library</Text>
+              </TouchableOpacity>
+
+              <View style={styles.cameraMenuSep} />
+
+              <TouchableOpacity
+                style={styles.cameraMenuItem}
+                activeOpacity={0.6}
+                onPress={() => handleCameraMenuAction("camera")}
+              >
+                {Platform.OS === "ios" ? (
+                  <SymbolView
+                    name="camera"
+                    style={styles.cameraMenuSymbol}
+                    tintColor={colors.accentPink}
+                  />
+                ) : (
+                  <Text style={[styles.cameraMenuSymbol, { fontSize: 18, textAlign: "center" }]}>📷</Text>
+                )}
+                <Text style={styles.cameraMenuLabel}>Take Photo</Text>
+              </TouchableOpacity>
+            </GlassView>
+          </View>
+        </View>
+      </Modal>
+
+      {/* ── Calendar sheet ──────────────────────────────────────────────── */}
+      <BottomSheet
+        ref={calSheetRef}
+        index={-1}
+        snapPoints={["65%"]}
+        enablePanDownToClose
+        backgroundStyle={styles.sheetBg}
+        handleIndicatorStyle={styles.sheetHandle}
+      >
+        <BottomSheetView style={styles.calSheet}>
+          {/* Today | Apr 2026 | Done */}
+          <View style={styles.calHeader}>
+            <TouchableOpacity
+              onPress={() => { setDate(todayStr); closeCalendar(); }}
+              activeOpacity={0.7}
+            >
+              <Text style={styles.calAction}>Today</Text>
+            </TouchableOpacity>
+            <Text style={styles.calMonth}>{monthYearLabel}</Text>
+            <TouchableOpacity onPress={closeCalendar} activeOpacity={0.7}>
+              <Text style={styles.calAction}>Done</Text>
+            </TouchableOpacity>
+          </View>
+
+          <Calendar
+            current={selectedDate}
+            onDayPress={(day) => { setDate(day.dateString); closeCalendar(); }}
+            markedDates={markedDates}
+            markingType="custom"
+            hideArrows={false}
+            renderArrow={(dir) => (
+              <Text style={styles.calArrow}>{dir === "left" ? "‹" : "›"}</Text>
+            )}
+            theme={{
+              calendarBackground: "transparent",
+              textSectionTitleColor: colors.systemGray2,
+              selectedDayBackgroundColor: colors.accentGreen,
+              selectedDayTextColor: "#000",
+              todayTextColor: colors.accentPurple,
+              dayTextColor: colors.textPrimary,
+              textDisabledColor: colors.systemGray3,
+              monthTextColor: "transparent",
+              textMonthFontSize: 0,
+              textDayFontSize: 16,
+              textDayFontWeight: "400",
+              textDayHeaderFontSize: 13,
+              textDayHeaderFontWeight: "500",
+              "stylesheet.calendar.header": {
+                header: { height: 0, overflow: "hidden" },
+              },
+            }}
+          />
+        </BottomSheetView>
+      </BottomSheet>
+
+      {/* ── Settings sheet ──────────────────────────────────────────────── */}
+      <BottomSheet
+        ref={settingsSheetRef}
+        index={-1}
+        snapPoints={["90%"]}
+        enablePanDownToClose
+        backgroundStyle={styles.sheetBg}
+        handleIndicatorStyle={styles.sheetHandle}
+      >
+        <BottomSheetScrollView
+          contentContainerStyle={[styles.settingsContent, { paddingBottom: insets.bottom + 32 }]}
+        >
+          {/* Header */}
+          <View style={sS.header}>
+            <Text style={sS.title}>Settings</Text>
+            <TouchableOpacity onPress={closeSettings} activeOpacity={0.7} style={sS.closeBtn}>
+              <Text style={sS.closeBtnText}>✕</Text>
+            </TouchableOpacity>
+          </View>
+
+          {/* Profile */}
+          <Card>
+            <NavRow label="Name"  value="Pedro Moreira" />
+            <NavRow label="Email" value="pedrohenriqmoreira@gmail.com" isLast />
+          </Card>
+
+          <SectionTitle title="Goals & Targets" />
+          <Card>
+            <NavRow
+              badge="⚖" badgeColor="#3b82f6"
+              label="61.5 kg"
+              sublabel="🔥 2,729 cal · P 136g · C 303g · F 91g"
+            />
+            <NavRow
+              badge="📊" badgeColor="#3b82f6"
+              label="Manage Nutrition Goals"
+              onPress={() => {}} isLast
+            />
+          </Card>
+
+          <SectionTitle title="Health Profile" />
+          <Card>
+            <NavRow
+              badge="❤" badgeColor="#ef4444"
+              label="61.5 kg (current weight)"
+              sublabel="Moderately Active"
+            />
+            <NavRow
+              badge="📋" badgeColor="#ef4444"
+              label="Manage Health Info"
+              onPress={() => {}} isLast
+            />
+          </Card>
+
+          <SectionTitle title="Weight Tracking" />
+          <Card>
+            <NavRow
+              badge="📉" badgeColor="#a855f7"
+              label="61.5 kg"
+              sublabel="Log weight to see trends"
+              onPress={() => {}} isLast
+            />
+          </Card>
+
+          <SectionTitle title="Saved Meals" />
+          <Card>
+            <NavRow
+              badge="🍽" badgeColor="#f97316"
+              label="Manage Saved Meals"
+              sublabel={savedMealsLabel}
+              onPress={() => setSettingsView("savedMeals")} isLast
+            />
+          </Card>
+
+          <SectionTitle title="Preferences" />
+          <Card>
+            <NavRow
+              badge="🔥" badgeColor="#f97316"
+              label="Calorie Estimate Bias"
+              sublabel="Accurate"
+              onPress={() => {}}
+            />
+            <ToggleRow
+              badge="🔔" badgeColor="#f97316"
+              label="Daily Tracking Reminders"
+              value={reminders}
+              onToggle={() => setReminders(v => !v)}
+              isLast
+            />
+          </Card>
+
+          <SectionTitle title="Device Settings" />
+          <Card>
+            <NavRow badge="🌙" badgeColor="#636366" label="Appearance" value="System ▾" />
+            <ToggleRow
+              badge="🕐" badgeColor="#22c55e"
+              label="Automatic Time Zone"
+              value={autoTimeZone}
+              onToggle={() => setAutoTimeZone(v => !v)}
+            />
+            <NavRow
+              badge="🎤" badgeColor="#3b82f6"
+              label="Dictation Language"
+              value="Auto-detect ▾"
+              isLast
+            />
+          </Card>
+
+          <SectionTitle title="Subscription" />
+          <Card>
+            <NavRow
+              badge="👑" badgeColor="#eab308"
+              label="Subscription Active"
+              sublabel="Tasanka 3 Apr 2025"
+            />
+            <NavRow label="Manage Subscription" onPress={() => {}} isLast />
+          </Card>
+
+          <Card>
+            <NavRow badge="⭐" badgeColor="#a855f7" label="Give Feedback" onPress={() => {}} />
+            <NavRow badge="💜" badgeColor="#a855f7" label="About the App" onPress={() => {}} isLast />
+          </Card>
+
+          {/* Destructive */}
+          <Card>
+            <NavRow badge="💬" badgeColor="#3b82f6"  label="Contact Support" onPress={() => {}} />
+            <NavRow badge="🗑"  badgeColor="#636366"  label="Clear Local Cache" onPress={() => {}} />
+            <NavRow badge="📤" badgeColor="#f97316"   label="Export Data" onPress={() => {}} />
+            <NavRow badge="⚠"  badgeColor="#ef4444"  label="Delete Account" onPress={() => {}} />
+            <NavRow badge="🚪" badgeColor="#ef4444"   label="Sign Out" onPress={() => {}} isLast />
+          </Card>
+        </BottomSheetScrollView>
+      </BottomSheet>
+
+      <Modal
+        animationType="slide"
+        transparent
+        visible={settingsView === "savedMeals"}
+        onRequestClose={() => setSettingsView("main")}
+      >
+        <View style={styles.modalBackdrop}>
+          <GlassView isInteractive={false} style={[styles.modalCard, styles.managerCard, glass("rgba(255,255,255,0.09)")]}>
+            <View style={styles.managerHeader}>
+              <TouchableOpacity
+                onPress={() => setSettingsView("main")}
+                activeOpacity={0.8}
+                style={styles.managerHeaderBtn}
+              >
+                <Text style={styles.managerHeaderBtnText}>‹</Text>
+              </TouchableOpacity>
+              <Text style={styles.managerTitle}>Saved Meals</Text>
+              <TouchableOpacity
+                onPress={() => setSettingsView("main")}
+                activeOpacity={0.8}
+                style={styles.managerHeaderBtn}
+              >
+                <Text style={styles.managerHeaderBtnText}>✕</Text>
+              </TouchableOpacity>
+            </View>
+
+            <ScrollView
+              style={styles.managerList}
+              contentContainerStyle={styles.managerListContent}
+              showsVerticalScrollIndicator={false}
+            >
+              {savedMeals.length === 0 ? (
+                <View style={styles.emptyState}>
+                  <Text style={styles.emptyTitle}>No saved meals yet</Text>
+                  <Text style={styles.emptySub}>
+                    Digite uma refeicao no chat e toque no + para salva-la com macros.
+                  </Text>
+                </View>
+              ) : (
+                savedMeals.map((meal) => (
+                  <GlassView isInteractive key={meal.id} style={[styles.savedMealCard, glass("rgba(255,255,255,0.06)")]}>
+                    <View style={styles.savedMealHeader}>
+                      <Text style={styles.savedMealName}>{meal.name}</Text>
+                      <TouchableOpacity
+                        onPress={() => handleDeleteSavedMeal(meal)}
+                        activeOpacity={0.8}
+                        style={styles.deleteBtn}
+                      >
+                        <Text style={styles.deleteBtnText}>✕</Text>
+                      </TouchableOpacity>
+                    </View>
+                    <Text style={styles.savedMealMacros}>
+                      🔥 {Math.round(meal.calories)} cal · P {Math.round(meal.protein_g)}g ·
+                      {" "}C {Math.round(meal.carbs_g)}g · F {Math.round(meal.fat_g)}g
+                    </Text>
+                    <Text style={styles.savedMealItems}>{meal.items}</Text>
+                  </GlassView>
+                ))
+              )}
+            </ScrollView>
+          </GlassView>
+        </View>
+      </Modal>
+
+      <Modal
+        animationType="fade"
+        transparent
+        visible={saveMealModalVisible}
+        onRequestClose={() => {
+          setSaveMealModalVisible(false);
+          setPendingSavedMeal(null);
+        }}
+      >
+        <View style={styles.modalBackdrop}>
+          <GlassView isInteractive={false} style={[styles.modalCard, glass("rgba(255,255,255,0.09)")]}>
+            <Text style={styles.modalTitle}>Save meal</Text>
+            <Text style={styles.modalDescription}>
+              Escolha o nome que o usuario vai digitar depois no chat.
+            </Text>
+
+            <TextInput
+              value={savedMealName}
+              onChangeText={setSavedMealName}
+              placeholder="Ex.: cafe da manha padrao"
+              placeholderTextColor={colors.systemGray3}
+              style={styles.modalInput}
+              autoFocus
+            />
+
+            {pendingSavedMeal ? (
+              <Text style={styles.modalMacros}>
+                🔥 {Math.round(pendingSavedMeal.totals.calories)} cal · P{" "}
+                {Math.round(pendingSavedMeal.totals.protein_g)}g · C{" "}
+                {Math.round(pendingSavedMeal.totals.carbs_g)}g · F{" "}
+                {Math.round(pendingSavedMeal.totals.fat_g)}g
+              </Text>
+            ) : null}
+
+            <View style={styles.modalActions}>
+              <TouchableOpacity
+                onPress={() => {
+                  setSaveMealModalVisible(false);
+                  setPendingSavedMeal(null);
+                }}
+                activeOpacity={0.8}
+                style={styles.modalSecondaryBtn}
+              >
+                <Text style={styles.modalSecondaryText}>Cancelar</Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                onPress={handleConfirmSaveMeal}
+                activeOpacity={0.8}
+                style={styles.modalPrimaryBtn}
+              >
+                <Text style={styles.modalPrimaryText}>Salvar</Text>
+              </TouchableOpacity>
+            </View>
+          </GlassView>
+        </View>
+      </Modal>
+    </View>
+  );
+}
+
+/* ── styles ────────────────────────────────────────────────────────────────── */
+
+const styles = StyleSheet.create({
+  root: { flex: 1, backgroundColor: colors.bgPrimary },
+  flex: { flex: 1 },
+
+  /* Header */
+  header: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    paddingHorizontal: spacing.xl,
+    paddingBottom: spacing.md,
+    position: "relative",
+  },
+  logo: { fontSize: 28 },
+  datePillCenter: {
+    position: "absolute",
+    left: 0,
+    right: 0,
+    top: 0,
+    bottom: 0,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+
+  /* Date pill */
+  datePill: {
+    paddingHorizontal: spacing.xl,
+    paddingVertical: spacing.sm + 3,
+    borderRadius: radius.full,
+    alignItems: "center",
+  },
+  dateLabel: { ...typography.headline, fontWeight: "600" },
+
+  /* Right pill — sibling of date pill */
+  rightPill: {
+    flexDirection: "row",
+    alignItems: "center",
+    paddingHorizontal: spacing.md + 2,
+    paddingVertical: spacing.sm + 3,
+    borderRadius: radius.full,
+    gap: spacing.xs,
+  },
+  streakText:  { fontSize: 15 },
+  streakCount: { fontSize: 14, fontWeight: "600", color: colors.textPrimary },
+  pillDivider: {
+    width: 1,
+    height: 14,
+    backgroundColor: "rgba(255,255,255,0.15)",
+    marginHorizontal: spacing.xs,
+  },
+  gearIcon:   { fontSize: 15, color: colors.textSecondary },
+  gearSymbol: { width: 16, height: 16 },
+
+  /* Scroll */
+  scrollContent: {
+    paddingHorizontal: spacing.xl,
+    paddingTop: spacing.sm,
+    paddingBottom: spacing.md,
+    flexGrow: 1,
+  },
+
+  /* Inline input — no buttons, note-like */
+  inlineInput: {
+    ...typography.body,
+    color: "rgba(255,255,255,0.90)",
+    minHeight: 60,
+    textAlignVertical: "top",
+    paddingTop: spacing.xs,
+  },
+
+  /* Placeholder — subtle notebook prompt */
+  placeholder: {
+    ...typography.body,
+    color: colors.systemGray3,
+    paddingTop: spacing.xs,
+  },
+  addMoreBtn: { paddingVertical: spacing.md, alignItems: "center" },
+  addMoreText: { ...typography.callout, color: colors.systemGray },
+
+  /* Listening indicator */
+  listeningBadge: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: spacing.sm,
+    alignSelf: "flex-start",
+    paddingHorizontal: 14,
+    paddingVertical: 6,
+    borderRadius: radius.full,
+    backgroundColor: "rgba(239,68,68,0.12)",
+    borderWidth: 1,
+    borderColor: "rgba(239,68,68,0.20)",
+    marginBottom: spacing.md,
+  },
+  listeningDot: {
+    width: 8, height: 8, borderRadius: 4,
+    backgroundColor: colors.accentRed,
+  },
+  listeningText: { fontSize: 13, color: colors.accentRed },
+  errorText: {
+    fontSize: 13,
+    color: colors.accentRed,
+    marginBottom: spacing.md,
+  },
+
+  /* Bottom sheets */
+  sheetBg:     { backgroundColor: "rgba(30,30,30,0.92)", borderTopLeftRadius: radius.xl, borderTopRightRadius: radius.xl },
+  sheetHandle: { backgroundColor: colors.systemGray3 },
+
+  /* Calendar sheet */
+  calSheet:  { paddingHorizontal: spacing.xl, paddingBottom: spacing.xl },
+  calHeader: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    paddingVertical: spacing.lg,
+  },
+  calAction: { fontSize: 16, fontWeight: "500", color: colors.accentBlue },
+  calMonth:  { ...typography.headline, fontWeight: "600" },
+  calArrow:  { fontSize: 22, color: colors.textSecondary, lineHeight: 26 },
+
+  /* Settings sheet */
+  settingsContent: { paddingHorizontal: spacing.xl, paddingTop: spacing.sm },
+
+  modalBackdrop: {
+    flex: 1,
+    backgroundColor: "rgba(0,0,0,0.45)",
+    alignItems: "center",
+    justifyContent: "center",
+    paddingHorizontal: spacing.xl,
+  },
+  modalCard: {
+    width: "100%",
+    borderRadius: radius.xl,
+    padding: spacing.xl,
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: colors.glassBorder,
+    overflow: "hidden",
+  },
+  managerCard: {
+    maxHeight: "78%",
+  },
+  managerHeader: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    marginBottom: spacing.lg,
+  },
+  managerHeaderBtn: {
+    width: 32,
+    height: 32,
+    borderRadius: 16,
+    backgroundColor: "rgba(255,255,255,0.08)",
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  managerHeaderBtnText: {
+    fontSize: 16,
+    color: colors.textSecondary,
+    fontWeight: "600",
+  },
+  managerTitle: {
+    ...typography.title3,
+    color: colors.textPrimary,
+  },
+  managerList: {
+    width: "100%",
+  },
+  managerListContent: {
+    gap: spacing.md,
+    paddingBottom: spacing.xs,
+  },
+  emptyState: {
+    paddingVertical: spacing.xl,
+    alignItems: "center",
+  },
+  emptyTitle: {
+    ...typography.subhead,
+    color: colors.textPrimary,
+    marginBottom: spacing.xs,
+  },
+  emptySub: {
+    ...typography.footnote,
+    color: colors.systemGray,
+    textAlign: "center",
+  },
+  savedMealCard: {
+    borderRadius: radius.lg,
+    padding: spacing.lg,
+    overflow: "hidden",
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: "rgba(255,255,255,0.12)",
+  },
+  savedMealHeader: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    gap: spacing.md,
+  },
+  savedMealName: {
+    ...typography.subhead,
+    color: colors.textPrimary,
+    flex: 1,
+  },
+  savedMealMacros: {
+    ...typography.footnote,
+    color: colors.systemGray,
+    marginTop: spacing.sm,
+  },
+  savedMealItems: {
+    ...typography.caption1,
+    color: colors.systemGray3,
+    marginTop: spacing.xs,
+  },
+  deleteBtn: {
+    width: 30,
+    height: 30,
+    borderRadius: 15,
+    alignItems: "center",
+    justifyContent: "center",
+    backgroundColor: "rgba(239,68,68,0.14)",
+  },
+  deleteBtnText: {
+    fontSize: 13,
+    color: colors.accentRed,
+    fontWeight: "700",
+  },
+  modalTitle: {
+    ...typography.title3,
+    color: colors.textPrimary,
+    marginBottom: spacing.xs,
+  },
+  modalDescription: {
+    ...typography.footnote,
+    color: colors.systemGray,
+    marginBottom: spacing.lg,
+  },
+  modalInput: {
+    ...typography.body,
+    color: colors.textPrimary,
+    borderRadius: radius.md,
+    borderWidth: 1,
+    borderColor: "rgba(255,255,255,0.10)",
+    backgroundColor: "rgba(255,255,255,0.04)",
+    paddingHorizontal: spacing.md,
+    paddingVertical: spacing.md,
+  },
+  modalMacros: {
+    ...typography.footnote,
+    color: colors.systemGray,
+    marginTop: spacing.md,
+  },
+  modalActions: {
+    flexDirection: "row",
+    justifyContent: "flex-end",
+    gap: spacing.sm,
+    marginTop: spacing.xl,
+  },
+  modalSecondaryBtn: {
+    borderRadius: radius.full,
+    paddingHorizontal: spacing.lg,
+    paddingVertical: spacing.sm + 2,
+    backgroundColor: "rgba(255,255,255,0.08)",
+  },
+  modalSecondaryText: {
+    ...typography.subhead,
+    color: colors.textSecondary,
+  },
+  modalPrimaryBtn: {
+    borderRadius: radius.full,
+    paddingHorizontal: spacing.lg,
+    paddingVertical: spacing.sm + 2,
+    backgroundColor: colors.accentGreen,
+  },
+  modalPrimaryText: {
+    ...typography.subhead,
+    color: "#000",
+    fontWeight: "700",
+  },
+
+  /* Camera context menu */
+  cameraMenuOverlay: {
+    flex: 1,
+  },
+  cameraMenuAnchor: {
+    position: "absolute",
+    bottom: spacing.xl + 60,
+    right: spacing.xl,
+  },
+  cameraMenu: {
+    borderRadius: radius.xl,
+    overflow: "hidden",
+    minWidth: 240,
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: colors.glassBorder,
+    shadowColor: "#000",
+    shadowOffset: { width: 0, height: 8 },
+    shadowOpacity: 0.35,
+    shadowRadius: 20,
+    elevation: 8,
+  },
+  cameraMenuItem: {
+    flexDirection: "row",
+    alignItems: "center",
+    paddingHorizontal: spacing.lg + 2,
+    paddingVertical: spacing.md + 2,
+    gap: spacing.md,
+  },
+  cameraMenuSep: {
+    height: StyleSheet.hairlineWidth,
+    backgroundColor: "rgba(255,255,255,0.08)",
+    marginHorizontal: spacing.md,
+  },
+  cameraMenuLabel: {
+    ...typography.body,
+    color: colors.textPrimary,
+    fontWeight: "500",
+  },
+  cameraMenuSymbol: {
+    width: 22,
+    height: 22,
+  },
+});
+
+/* ── settings styles ───────────────────────────────────────────────────────── */
+const sS = StyleSheet.create({
+  header: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    paddingVertical: spacing.lg,
+  },
+  title:    { ...typography.title2 },
+  closeBtn: {
+    width: 28, height: 28, borderRadius: 14,
+    backgroundColor: "rgba(255,255,255,0.10)",
+    alignItems: "center", justifyContent: "center",
+  },
+  closeBtnText: { fontSize: 13, color: colors.textSecondary, lineHeight: 17 },
+
+  sectionTitle: {
+    fontSize: 13,
+    fontWeight: "500",
+    color: colors.systemGray2,
+    letterSpacing: 0.3,
+    marginBottom: spacing.sm,
+    marginTop: spacing.lg,
+    paddingHorizontal: spacing.xs,
+  },
+
+  /* Card */
+  card: { borderRadius: radius.lg, overflow: "hidden", marginBottom: 0 },
+
+  /* Row */
+  row: {
+    flexDirection: "row",
+    alignItems: "center",
+    paddingHorizontal: spacing.lg,
+    paddingVertical: 13,
+    minHeight: 50,
+    borderBottomWidth: StyleSheet.hairlineWidth,
+    borderBottomColor: "rgba(255,255,255,0.06)",
+    gap: spacing.md,
+  },
+  rowLast: { borderBottomWidth: 0 },
+  rowBody: { flex: 1 },
+  rowLabel: { ...typography.subhead, fontWeight: "400" },
+  rowSub: {
+    fontSize: 12, color: colors.systemGray2,
+    marginTop: 2, letterSpacing: -0.1,
+  },
+  rowVal:  { fontSize: 14, color: colors.systemGray },
+  chevron: { fontSize: 20, color: colors.systemGray3, lineHeight: 24 },
+
+  /* Icon — bare glyph, no container */
+  badgeIcon: {
+    fontSize: 18,
+    width: 24,
+    textAlign: "center",
+    flexShrink: 0,
+  },
+
+  /* Toggle — liquid-glass premium treatment */
+  toggle: {
+    width: 48, height: 28, borderRadius: 14,
+    backgroundColor: "rgba(120,120,128,0.32)",
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: "rgba(255,255,255,0.08)",
+    justifyContent: "center",
+    paddingHorizontal: 2,
+    flexShrink: 0,
+  },
+  toggleOn: {
+    backgroundColor: colors.accentGreen,
+    borderColor: "rgba(255,255,255,0.12)",
+  },
+  thumb: {
+    width: 24, height: 24, borderRadius: 12,
+    backgroundColor: "#ffffff",
+    shadowColor: "#000",
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.25,
+    shadowRadius: 4,
+    elevation: 3,
+  },
+  thumbOn: { transform: [{ translateX: 20 }] },
+});

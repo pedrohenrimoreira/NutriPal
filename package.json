@@ -2,9 +2,8 @@
   "name": "nutrilens-workspace",
   "private": true,
   "scripts": {
-    "mobile:test": "powershell -ExecutionPolicy Bypass -File scripts/mobile-tunnel.ps1",
-    "mobile:stop": "powershell -ExecutionPolicy Bypass -File scripts/mobile-tunnel-stop.ps1",
-    "mobile:stop:all": "powershell -ExecutionPolicy Bypass -File scripts/mobile-tunnel-stop.ps1 -StopFrontend"
+    "mobile:start": "npm --prefix mobile run start",
+    "mobile:start:go": "npm --prefix mobile run start:go"
   },
   "devDependencies": {
     "typescript": "^6.0.2"
