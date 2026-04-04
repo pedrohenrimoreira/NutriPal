@@ -410,6 +410,80 @@ body {
 }
 
 /* ==========================================
+   NOTEPAD — Apple Notes-style diary rows
+   ========================================== */
+
+.notepad-row {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 10px 0;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.04);
+  animation: slideUp 0.25s cubic-bezier(0.4, 0, 0.2, 1) both;
+}
+
+.notepad-row:last-of-type {
+  border-bottom: none;
+}
+
+.notepad-text {
+  flex: 1;
+  font-size: 15px;
+  line-height: 1.55;
+  color: rgba(245, 245, 245, 0.9);
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+
+.notepad-meta {
+  flex-shrink: 0;
+  padding-top: 2px;
+  font-size: 13px;
+  font-weight: 500;
+  text-align: right;
+  min-width: 72px;
+}
+
+.notepad-thinking {
+  color: var(--text-muted);
+  font-style: italic;
+  font-size: 13px;
+  font-weight: 400;
+}
+
+.notepad-cal {
+  color: var(--accent-orange);
+  letter-spacing: -0.2px;
+}
+
+.notepad-input-row {
+  border-bottom: none;
+  padding-top: 10px;
+}
+
+.notepad-textarea {
+  flex: 1;
+  background: transparent;
+  resize: none;
+  outline: none;
+  border: none;
+  font-size: 15px;
+  line-height: 1.55;
+  color: rgba(245, 245, 245, 0.9);
+  font-family: inherit;
+  width: 100%;
+  min-height: 24px;
+  padding: 0;
+  overflow: hidden;
+  caret-color: var(--accent-orange);
+}
+
+.notepad-textarea::placeholder {
+  color: var(--text-muted);
+}
+
+/* ==========================================
    SCROLLBAR
    ========================================== */
 

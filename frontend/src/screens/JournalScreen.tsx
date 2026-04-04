@@ -1,9 +1,9 @@
-﻿/**
- * screens/JournalScreen.tsx - Main diary screen (Amy-inspired).
+/**
+ * screens/JournalScreen.tsx - Apple Notes-style notepad diary.
  *
  * Layout:
  * - Header: mascot, date pill (opens calendar), streak + settings
- * - Scrollable meal log (swipeable to change days)
+ * - Notepad: continuous list of meal lines + active input line at bottom
  * - GoalsPanel (hides on keyboard) + ActionBar (follows keyboard)
  */
 
@@ -15,9 +15,9 @@ import { useKeyboardOffset } from '../hooks/useKeyboardOffset';
 import { useSwipeGesture } from '../hooks/useSwipeGesture';
 import { useSpeechRecognition } from '../hooks/useSpeechRecognition';
 import { GoalsPanel } from '../components/journal/GoalsPanel';
-import { MealEntryCard } from '../components/journal/MealEntryCard';
 import { ActionBar } from '../components/journal/ActionBar';
 import { DatePicker } from '../components/ui/DatePicker';
+import type { MealEntry } from '../types/food';
 
 interface JournalScreenProps {
   onOpenSettings: () => void;
@@ -38,6 +38,23 @@ function formatDateLabel(dateStr: string): string {
   return d.toLocaleDateString('pt-BR', { day: 'numeric', month: 'short' });
 }
 
+function EntryRow({ entry }: { entry: MealEntry }) {
+  const cal = entry.parsedResult ? Math.round(entry.parsedResult.totals.calories) : null;
+
+  return (
+    <div className="notepad-row">
+      <p className="notepad-text">{entry.rawText}</p>
+      <span className="notepad-meta">
+        {entry.isDirty && !entry.parsedResult ? (
+          <span className="notepad-thinking">Thinking</span>
+        ) : cal !== null ? (
+          <span className="notepad-cal">⚡ {cal} cal</span>
+        ) : null}
+      </span>
+    </div>
+  );
+}
+
 export function JournalScreen({ onOpenSettings }: JournalScreenProps) {
   const entries = useJournalStore((s) => s.entries);
   const selectedDate = useJournalStore((s) => s.selectedDate);
@@ -51,13 +68,13 @@ export function JournalScreen({ onOpenSettings }: JournalScreenProps) {
   const keyboardOffset = useKeyboardOffset();
 
   const [goalsExpanded, setGoalsExpanded] = useState(false);
-  const [isEditing, setIsEditing] = useState(false);
   const [text, setText] = useState('');
   const [calendarOpen, setCalendarOpen] = useState(false);
   const [swipeAnim, setSwipeAnim] = useState<'none' | 'left' | 'right'>('none');
 
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const scrollRef = useRef<HTMLDivElement>(null);
+  const bottomRef = useRef<HTMLDivElement>(null);
 
   // Auto-resize textarea
   useEffect(() => {
@@ -66,6 +83,11 @@ export function JournalScreen({ onOpenSettings }: JournalScreenProps) {
       textareaRef.current.style.height = `${textareaRef.current.scrollHeight}px`;
     }
   }, [text]);
+
+  // Scroll to bottom when new entries arrive or text changes
+  useEffect(() => {
+    bottomRef.current?.scrollIntoView({ behavior: 'smooth' });
+  }, [entries.length]);
 
   // Navigate to previous/next day
   const goToDay = useCallback(
@@ -96,18 +118,14 @@ export function JournalScreen({ onOpenSettings }: JournalScreenProps) {
     clearTranscript,
   } = useSpeechRecognition();
 
-  // Keep transcription mirrored in the textarea, including final text after end.
+  // Mirror transcription into the input
   useEffect(() => {
     if (transcript) {
       setText(transcript);
-      if (!isEditing) {
-        setIsEditing(true);
-      }
     }
-  }, [transcript, isEditing]);
+  }, [transcript]);
 
-  const handleStartEditing = () => {
-    setIsEditing(true);
+  const focusInput = () => {
     setTimeout(() => textareaRef.current?.focus(), 50);
   };
 
@@ -116,9 +134,7 @@ export function JournalScreen({ onOpenSettings }: JournalScreenProps) {
       stopListening();
       return;
     }
-
-    setIsEditing(true);
-    setTimeout(() => textareaRef.current?.focus(), 50);
+    focusInput();
     clearTranscript();
     startListening();
   };
@@ -131,24 +147,15 @@ export function JournalScreen({ onOpenSettings }: JournalScreenProps) {
 
     await addTextEntry(raw);
     setText('');
-    setIsEditing(false);
     clearTranscript();
+    // Keep focus on the textarea so the next entry can be typed immediately
+    setTimeout(() => textareaRef.current?.focus(), 30);
   };
 
   const handleImageSelected = async (file: File, source: 'camera' | 'library') => {
     const imageUrl = URL.createObjectURL(file);
-
     await addImageEntry(imageUrl);
-
-    // TODO: Phase 2 - call /parse/image and attach ParseResponse to this entry.
-    console.log('Image queued for AI parsing:', {
-      source,
-      name: file.name,
-      size: file.size,
-      type: file.type,
-    });
-
-    setIsEditing(false);
+    console.log('Image queued for AI parsing:', { source, name: file.name });
   };
 
   const handleAddSavedMeal = () => {
@@ -162,8 +169,7 @@ export function JournalScreen({ onOpenSettings }: JournalScreenProps) {
       '';
 
     if (!sourceText) {
-      setIsEditing(true);
-      setTimeout(() => textareaRef.current?.focus(), 50);
+      focusInput();
       window.alert('Digite uma refeicao primeiro para salvar como Saved Meal.');
       return;
     }
@@ -171,7 +177,6 @@ export function JournalScreen({ onOpenSettings }: JournalScreenProps) {
     const suggestedName =
       sourceText.length > 32 ? `${sourceText.slice(0, 32).trim()}...` : sourceText;
     const name = window.prompt('Nome da Saved Meal:', suggestedName);
-
     if (!name || !name.trim()) return;
 
     const parsedTotals = latestEntry?.parsedResult?.totals;
@@ -202,6 +207,7 @@ export function JournalScreen({ onOpenSettings }: JournalScreenProps) {
 
   return (
     <div className="flex flex-col h-full relative">
+      {/* Header */}
       <header
         className="flex items-center justify-between px-5 flex-shrink-0 relative"
         style={{ paddingTop: 'calc(12px + var(--safe-top))' }}
@@ -245,80 +251,60 @@ export function JournalScreen({ onOpenSettings }: JournalScreenProps) {
         />
       </header>
 
+      {/* Notepad */}
       <div
         ref={scrollRef}
         className="flex-1 overflow-y-auto px-5 pt-4"
         style={{ WebkitOverflowScrolling: 'touch' }}
         {...swipeHandlers}
+        onClick={focusInput}
       >
         <div style={contentStyle}>
+          {/* Voice indicator */}
           {isListening && (
-            <div className="mb-3">
-              <div className="voice-indicator">
+            <div className="notepad-row mb-1">
+              <span className="notepad-thinking flex items-center gap-1.5">
                 <span className="voice-indicator-dot" />
-                <span>Ouvindo...</span>
-              </div>
+                Ouvindo…
+              </span>
             </div>
           )}
 
-          {speechError && <div className="mb-3 text-xs text-red-400">{speechError}</div>}
-
-          {isEditing ? (
-            <div className="animate-fade-in">
-              <textarea
-                ref={textareaRef}
-                value={text}
-                onChange={(e) => setText(e.target.value)}
-                placeholder="O que voce comeu?..."
-                className="w-full bg-transparent resize-none outline-none text-[15px] text-white/90 placeholder-zinc-600 leading-relaxed min-h-[60px]"
-                autoFocus
-                onKeyDown={(e) => {
-                  if (e.key === 'Enter' && !e.shiftKey) {
-                    e.preventDefault();
-                    void handleSubmit();
-                  }
-                }}
-              />
-              <div className="flex justify-end gap-2 mt-3">
-                <button
-                  onClick={() => {
-                    setIsEditing(false);
-                    setText('');
-                  }}
-                  className="px-4 py-2 text-sm text-zinc-400 rounded-lg transition-colors"
-                >
-                  Cancelar
-                </button>
-                <button
-                  onClick={() => void handleSubmit()}
-                  className="px-4 py-2 text-sm font-medium rounded-lg transition-all"
-                  style={{
-                    background: text.trim() ? 'var(--accent-green)' : 'rgba(255,255,255,0.06)',
-                    color: text.trim() ? '#000' : 'var(--text-muted)',
-                  }}
-                >
-                  Salvar
-                </button>
-              </div>
-            </div>
-          ) : entries.length === 0 ? (
-            <button
-              onClick={handleStartEditing}
-              className="w-full text-left text-[15px] text-zinc-500 py-1 transition-colors active:text-zinc-300"
-              id="start-logging-btn"
-            >
-              Start logging your meals...
-            </button>
-          ) : (
-            <div className="space-y-3 stagger">
-              {entries.map((entry) => (
-                <MealEntryCard key={entry.id} entry={entry} />
-              ))}
+          {speechError && (
+            <div className="notepad-row mb-1">
+              <span className="text-red-400 text-sm">{speechError}</span>
             </div>
           )}
+
+          {/* Logged entries */}
+          {entries.map((entry) => (
+            <EntryRow key={entry.id} entry={entry} />
+          ))}
+
+          {/* Active input line */}
+          <div className="notepad-row notepad-input-row">
+            <textarea
+              ref={textareaRef}
+              value={text}
+              onChange={(e) => setText(e.target.value)}
+              placeholder={entries.length === 0 ? 'Start logging your meals…' : ''}
+              className="notepad-textarea"
+              rows={1}
+              autoFocus
+              onKeyDown={(e) => {
+                if (e.key === 'Enter' && !e.shiftKey) {
+                  e.preventDefault();
+                  void handleSubmit();
+                }
+              }}
+            />
+          </div>
+
+          <div ref={bottomRef} />
         </div>
       </div>
 
+      {/* Goals panel */}
       <div
         className="flex-shrink-0"
         style={{
@@ -337,6 +323,7 @@ export function JournalScreen({ onOpenSettings }: JournalScreenProps) {
         />
       </div>
 
+      {/* Action bar */}
       <div
         className="flex-shrink-0"
         style={{
@@ -353,7 +340,7 @@ export function JournalScreen({ onOpenSettings }: JournalScreenProps) {
         <ActionBar
           calories={Math.round(totals.calories)}
           isListening={isListening}
-          onStartEditing={handleStartEditing}
+          onStartEditing={focusInput}
           onAddSavedMeal={handleAddSavedMeal}
           onImageSelected={handleImageSelected}
           onToggleMic={handleToggleMic}
