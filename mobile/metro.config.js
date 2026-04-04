@@ -110,7 +110,6 @@ config.cacheStores = () => [
   }),
 ];
 config.resetCache = false;
-config.fileMapCacheDirectory = cacheDir;
 config.reporter = {
   ...config.reporter,
   update: (event) => {
@@ -132,18 +131,5 @@ config.reporter = {
     return event;
   },
 };
-
-const originalGetTransformOptions = config.transformer.getTransformOptions;
-
-config.transformer = {
-  ...config.transformer,
-  getTransformOptions: async (entryPoints, options) => {
-    if (options.dev === false) { 
-      fs.rmSync(cacheDir, { recursive: true, force: true });
-      fs.mkdirSync(cacheDir);
-    }
-    return await originalGetTransformOptions(entryPoints, options)
-  },
-}
 
 module.exports = config;

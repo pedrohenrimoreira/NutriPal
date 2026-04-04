@@ -1,22 +1,51 @@
 /**
- * Journal store using zustand
- * Manages meal entries and daily totals
+ * Journal store using zustand.
+ * Manages meal entries and daily totals.
  */
 import { useState, useCallback } from "react";
+import { estimateNutritionFromText } from "../utils/nutrition";
+import { useSettingsStore } from "./settingsStore";
 
 function toDateStr(d) {
   return d.toISOString().slice(0, 10);
 }
 
-// Simple in-memory store with React state (Phase 2: AsyncStorage persistence)
 let _entries = {};
 let _listeners = [];
+
+export function getEntriesForDate(date) {
+  return _entries[date] ?? [];
+}
 
 function notify() {
   _listeners.forEach((fn) => fn());
 }
 
-// Helper function to update parsed result
+function makeImageAsset(imageInput) {
+  if (typeof imageInput === "string") {
+    return { uri: imageInput };
+  }
+
+  if (!imageInput || typeof imageInput !== "object") {
+    return null;
+  }
+
+  const uri = typeof imageInput.uri === "string" ? imageInput.uri.trim() : "";
+  if (!uri) {
+    return null;
+  }
+
+  return {
+    uri,
+    fileName: typeof imageInput.fileName === "string" ? imageInput.fileName : undefined,
+    mimeType: typeof imageInput.mimeType === "string" ? imageInput.mimeType : undefined,
+    fileSize: typeof imageInput.fileSize === "number" ? imageInput.fileSize : undefined,
+    width: typeof imageInput.width === "number" ? imageInput.width : undefined,
+    height: typeof imageInput.height === "number" ? imageInput.height : undefined,
+    source: typeof imageInput.source === "string" ? imageInput.source : undefined,
+  };
+}
+
 function _updateParsedResult(id, result, forceRenderFn) {
   const day = Object.keys(_entries).find((d) =>
     _entries[d].some((e) => e.id === id),
@@ -49,39 +78,26 @@ export function useJournalStore() {
 
   const addTextEntry = useCallback(
     async (rawText) => {
+      const trimmed = rawText.trim();
+      if (!trimmed) return null;
+
       const entry = {
         id: `${Date.now()}-${Math.random().toString(36).slice(2)}`,
         date: selectedDate,
         createdAt: new Date().toISOString(),
-        rawText,
+        rawText: trimmed,
         isProcessing: true,
       };
       _entries[selectedDate] = [...(_entries[selectedDate] ?? []), entry];
       notify();
       forceRender((n) => n + 1);
 
-      // TODO: Call API to parse nutrition data
-      // Simulate processing
+      const savedMeals = useSettingsStore.getState().savedMeals;
+      const parsed = estimateNutritionFromText(trimmed, savedMeals);
+
       setTimeout(() => {
-        _updateParsedResult(
-          entry.id,
-          {
-            items: [
-              {
-                name: rawText,
-                quantity_g: 100,
-                calories: 200,
-                protein_g: 10,
-                carbs_g: 30,
-                fat_g: 5,
-                confidence: 0.8,
-              },
-            ],
-            totals: { calories: 200, protein_g: 10, carbs_g: 30, fat_g: 5 },
-          },
-          forceRender,
-        );
-      }, 1500);
+        _updateParsedResult(entry.id, parsed, forceRender);
+      }, parsed.matchedSavedMeal ? 120 : 350);
 
       return entry.id;
     },
@@ -89,13 +105,19 @@ export function useJournalStore() {
   );
 
   const addImageEntry = useCallback(
-    async (imageUri) => {
+    async (imageInput) => {
+      const imageAsset = makeImageAsset(imageInput);
+      if (!imageAsset?.uri) return null;
+
       const entry = {
         id: `${Date.now()}-${Math.random().toString(36).slice(2)}`,
         date: selectedDate,
         createdAt: new Date().toISOString(),
-        imageUri,
-        isProcessing: true,
+        rawText: "Imagem adicionada ao chat para analise futura.",
+        imageUri: imageAsset.uri,
+        imageAsset,
+        image: imageAsset,
+        isProcessing: false,
       };
       _entries[selectedDate] = [...(_entries[selectedDate] ?? []), entry];
       notify();
@@ -131,9 +153,6 @@ export function useJournalStore() {
   };
 }
 
-/**
- * Hook to calculate daily totals
- */
 export function useDailyTotals(entries) {
   return entries.reduce(
     (acc, entry) => {

@@ -1,5 +1,5 @@
 /**
- * MealEntryCard — displays a logged meal entry with liquid glass background.
+ * MealEntryCard - displays a logged meal entry with liquid glass background.
  */
 import React from "react";
 import { View, Text, StyleSheet, ActivityIndicator } from "react-native";
@@ -7,11 +7,74 @@ import { Image } from "expo-image";
 import { GlassView, isLiquidGlassAvailable } from "expo-glass-effect";
 import { colors, spacing, radius, typography } from "../../theme";
 
+function resolveImageAsset(entry) {
+  if (entry?.imageAsset && typeof entry.imageAsset === "object") {
+    return entry.imageAsset;
+  }
+
+  if (entry?.image && typeof entry.image === "object") {
+    return entry.image;
+  }
+
+  if (entry?.imageUri) {
+    return { uri: entry.imageUri };
+  }
+
+  return null;
+}
+
+function formatFileSize(fileSize) {
+  if (typeof fileSize !== "number" || !Number.isFinite(fileSize) || fileSize <= 0) {
+    return "";
+  }
+
+  if (fileSize < 1024) {
+    return `${fileSize} B`;
+  }
+
+  const units = ["KB", "MB", "GB"];
+  let size = fileSize / 1024;
+  let unitIndex = 0;
+
+  while (size >= 1024 && unitIndex < units.length - 1) {
+    size /= 1024;
+    unitIndex += 1;
+  }
+
+  const rounded = size >= 10 ? Math.round(size) : size.toFixed(1);
+  return `${rounded} ${units[unitIndex]}`;
+}
+
+function buildImageCaption(imageAsset) {
+  if (!imageAsset) {
+    return "";
+  }
+
+  const parts = [];
+
+  if (imageAsset.source) {
+    parts.push(imageAsset.source);
+  }
+
+  if (imageAsset.fileName) {
+    parts.push(imageAsset.fileName);
+  }
+
+  const sizeLabel = formatFileSize(imageAsset.fileSize);
+  if (sizeLabel) {
+    parts.push(sizeLabel);
+  }
+
+  return parts.join(" · ");
+}
+
 export function MealEntryCard({ entry }) {
   const time = new Date(entry.createdAt).toLocaleTimeString("pt-BR", {
     hour: "2-digit",
     minute: "2-digit",
   });
+  const imageAsset = resolveImageAsset(entry);
+  const imageCaption = buildImageCaption(imageAsset);
 
   return (
     <GlassView
@@ -20,10 +83,9 @@ export function MealEntryCard({ entry }) {
         styles.card,
         isLiquidGlassAvailable()
           ? {}
-          : { backgroundColor: "rgba(255, 255, 255, 0.1)" },
+          : { backgroundColor: "rgba(255,255,255,0.08)" },
       ]}
     >
-      {/* Header */}
       <View style={styles.header}>
         <Text style={styles.time}>{time}</Text>
         {entry.isProcessing && (
@@ -36,22 +98,26 @@ export function MealEntryCard({ entry }) {
         )}
       </View>
 
-      {/* Raw text */}
       {entry.rawText ? (
         <Text style={styles.rawText}>{entry.rawText}</Text>
       ) : null}
 
-      {/* Image */}
-      {entry.imageUri ? (
-        <Image
-          source={{ uri: entry.imageUri }}
-          style={styles.image}
-          contentFit="cover"
-          transition={100}
-        />
+      {imageAsset?.uri ? (
+        <View style={styles.imageBlock}>
+          <Image
+            source={{ uri: imageAsset.uri }}
+            style={styles.image}
+            contentFit="cover"
+            transition={100}
+          />
+          {imageCaption ? (
+            <Text style={styles.imageCaption} numberOfLines={1}>
+              {imageCaption}
+            </Text>
+          ) : null}
+        </View>
       ) : null}
 
-      {/* Parsed items */}
       {entry.parsedResult && entry.parsedResult.items.length > 0 && (
         <View style={styles.itemsContainer}>
           {entry.parsedResult.items.map((item, i) => (
@@ -92,11 +158,18 @@ const styles = StyleSheet.create({
     color: "rgba(255,255,255,0.9)",
     lineHeight: 24,
   },
+  imageBlock: {
+    marginTop: spacing.sm,
+  },
   image: {
     width: "100%",
     height: 200,
     borderRadius: radius.md,
-    marginTop: spacing.sm,
+  },
+  imageCaption: {
+    ...typography.caption1,
+    color: colors.systemGray2,
+    marginTop: spacing.xs,
   },
   itemsContainer: {
     marginTop: spacing.sm,

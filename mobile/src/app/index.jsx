@@ -1,414 +1,991 @@
 /**
- * Main Journal Screen with modals for calendar and settings
+ * Main Journal Screen
+ *
+ * UX intent:
+ *   Write → interpret → update the day.
+ *   No Save/Cancel. The entry lives inline on the daily page.
+ *   Bottom nutrition bar tap → expands goals panel with smooth animation.
  */
-import React, { useState, useRef, useCallback, useMemo } from "react";
+import React, {
+  useState, useRef, useCallback, useMemo, useEffect,
+} from "react";
 import {
-  View,
-  Text,
-  TextInput,
-  TouchableOpacity,
-  ScrollView,
-  KeyboardAvoidingView,
-  Platform,
-  StyleSheet,
-  Keyboard,
+  View, Text, TextInput, TouchableOpacity, ScrollView,
+  KeyboardAvoidingView, Platform, StyleSheet, Keyboard, LayoutAnimation,
+  useWindowDimensions, Modal, Alert, ActionSheetIOS,
 } from "react-native";
+import * as ImagePicker from "expo-image-picker";
+import { SymbolView } from "expo-symbols";
 import { GlassView, isLiquidGlassAvailable } from "expo-glass-effect";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { StatusBar } from "expo-status-bar";
-import BottomSheet, {
-  BottomSheetView,
-  BottomSheetScrollView,
-} from "@gorhom/bottom-sheet";
+import BottomSheet, { BottomSheetView, BottomSheetScrollView } from "@gorhom/bottom-sheet";
 import { Calendar } from "react-native-calendars";
+import { AnimatePresence, MotiView } from "moti";
 
-import { useJournalStore, useDailyTotals } from "../store/journalStore";
+import { useJournalStore, useDailyTotals, getEntriesForDate } from "../store/journalStore";
+import { useSettingsStore } from "../store/settingsStore";
+import { estimateNutritionFromText } from "../utils/nutrition";
+import { useSpeechRecognition } from "../hooks/useSpeechRecognition";
 import { MealEntryCard } from "../components/journal/MealEntryCard";
 import { ActionBar } from "../components/journal/ActionBar";
+import { GoalsPanel } from "../components/journal/GoalsPanel";
 import { colors, spacing, radius, typography } from "../theme";
 
+/* ── helpers ──────────────────────────────────────────────────────────────── */
+
 function toDateStr(d) {
+  return d.toISOString().slice(0, 10);
+}
+
+function offsetDay(dateStr, n) {
+  const d = new Date(`${dateStr}T12:00:00`);
+  d.setDate(d.getDate() + n);
   return d.toISOString().slice(0, 10);
 }
 
 function formatDateLabel(dateStr) {
   const today = toDateStr(new Date());
   const yesterday = toDateStr(new Date(Date.now() - 86400000));
-  if (dateStr === today) return "Hoje";
-  if (dateStr === yesterday) return "Ontem";
+  if (dateStr === today) return "Today";
+  if (dateStr === yesterday) return "Yesterday";
   const d = new Date(`${dateStr}T12:00:00`);
-  return d.toLocaleDateString("pt-BR", { day: "numeric", month: "short" });
+  return d.toLocaleDateString("en-US", { day: "numeric", month: "short" });
 }
 
-function SettingsRow({ label, value }) {
+function formatMonthYear(dateStr) {
+  const d = new Date(`${dateStr}T12:00:00`);
+  return d.toLocaleDateString("en-US", { month: "short", year: "numeric" });
+}
+
+const glass = (fallback) =>
+  isLiquidGlassAvailable() ? {} : { backgroundColor: fallback };
+
+/* ── settings sub-components ─────────────────────────────────────────────── */
+
+function IconBadge({ color, icon }) {
+  // No container — just the glyph with fixed width for row alignment.
+  // Emoji colors are intrinsic; color prop used for text-only glyphs.
   return (
-    <View style={styles.settingsRow}>
-      <Text style={styles.settingsRowLabel}>{label}</Text>
-      {value ? <Text style={styles.settingsRowValue}>{value}</Text> : null}
+    <Text style={[sS.badgeIcon, { color }]}>{icon}</Text>
+  );
+}
+
+function NavRow({ badge, badgeColor, label, sublabel, value, onPress, isLast }) {
+  const content = (
+    <View style={[sS.row, isLast && sS.rowLast]}>
+      {badge ? <IconBadge color={badgeColor} icon={badge} /> : null}
+      <View style={sS.rowBody}>
+        <Text style={sS.rowLabel}>{label}</Text>
+        {sublabel ? <Text style={sS.rowSub}>{sublabel}</Text> : null}
+      </View>
+      {value ? <Text style={sS.rowVal}>{value}</Text> : null}
+      {onPress ? <Text style={sS.chevron}>›</Text> : null}
+    </View>
+  );
+  return onPress ? (
+    <TouchableOpacity onPress={onPress} activeOpacity={0.7}>{content}</TouchableOpacity>
+  ) : content;
+}
+
+function ToggleRow({ badge, badgeColor, label, value, onToggle, isLast }) {
+  return (
+    <View style={[sS.row, isLast && sS.rowLast]}>
+      {badge ? <IconBadge color={badgeColor} icon={badge} /> : null}
+      <View style={sS.rowBody}>
+        <Text style={sS.rowLabel}>{label}</Text>
+      </View>
+      <TouchableOpacity
+        onPress={onToggle} activeOpacity={0.8}
+        style={[sS.toggle, value && sS.toggleOn]}
+      >
+        <View style={[sS.thumb, value && sS.thumbOn]} />
+      </TouchableOpacity>
     </View>
   );
 }
 
+function Card({ children }) {
+  return (
+    <GlassView
+      isInteractive={false}
+      style={[sS.card, glass("rgba(255,255,255,0.07)")]}
+    >
+      {children}
+    </GlassView>
+  );
+}
+
+function SectionTitle({ title }) {
+  return <Text style={sS.sectionTitle}>{title}</Text>;
+}
+
+/* ── main screen ─────────────────────────────────────────────────────────── */
+
 export default function Index() {
-  const { entries, selectedDate, setDate, addTextEntry } = useJournalStore();
+  const {
+    entries,
+    selectedDate,
+    setDate,
+    addTextEntry,
+    addImageEntry,
+  } = useJournalStore();
   const totals = useDailyTotals(entries);
+  const savedMeals = useSettingsStore((state) => state.savedMeals);
+  const addSavedMeal = useSettingsStore((state) => state.addSavedMeal);
+  const removeSavedMeal = useSettingsStore((state) => state.removeSavedMeal);
   const insets = useSafeAreaInsets();
+  const {
+    isListening,
+    transcript,
+    error: speechError,
+    startListening,
+    stopListening,
+    clearTranscript,
+  } = useSpeechRecognition();
 
   const [isEditing, setIsEditing] = useState(false);
   const [text, setText] = useState("");
-  const [isListening, setIsListening] = useState(false);
+  const [keyboardVisible, setKeyboardVisible] = useState(false);
+  const [goalsExpanded, setGoalsExpanded] = useState(false);
+  const [autoTimeZone, setAutoTimeZone] = useState(true);
+  const [reminders, setReminders] = useState(false);
+  const [settingsView, setSettingsView] = useState("main");
+  const [saveMealModalVisible, setSaveMealModalVisible] = useState(false);
+  const [savedMealName, setSavedMealName] = useState("");
+  const [pendingSavedMeal, setPendingSavedMeal] = useState(null);
 
+  const { width } = useWindowDimensions();
   const inputRef = useRef(null);
   const scrollRef = useRef(null);
-  const calendarSheetRef = useRef(null);
+  const swipeRef = useRef(null);
+  const calSheetRef = useRef(null);
   const settingsSheetRef = useRef(null);
+  const dictationBaseTextRef = useRef("");
+  const isListeningRef = useRef(isListening);
 
-  const dateLabel = useMemo(
-    () => formatDateLabel(selectedDate),
-    [selectedDate],
+  const prevDate = useMemo(() => offsetDay(selectedDate, -1), [selectedDate]);
+  const nextDate = useMemo(() => offsetDay(selectedDate, +1), [selectedDate]);
+
+  const todayStr = useMemo(() => toDateStr(new Date()), []);
+  const dateLabel = useMemo(() => formatDateLabel(selectedDate), [selectedDate]);
+  const monthYearLabel = useMemo(() => formatMonthYear(selectedDate), [selectedDate]);
+  const savedMealsLabel = useMemo(
+    () => `${savedMeals.length} saved meal${savedMeals.length !== 1 ? "s" : ""}`,
+    [savedMeals.length],
   );
 
+  /* keyboard visibility --------------------------------------------------- */
+  useEffect(() => {
+    isListeningRef.current = isListening;
+  }, [isListening]);
+
+  useEffect(() => {
+    const willShow = Platform.OS === "ios" ? "keyboardWillShow" : "keyboardDidShow";
+    const willHide = Platform.OS === "ios" ? "keyboardWillHide" : "keyboardDidHide";
+    const didHide  = "keyboardDidHide";
+
+    // Show: mark visible + collapse goals immediately
+    const sL = Keyboard.addListener(willShow, () => {
+      LayoutAnimation.configureNext(LayoutAnimation.Presets.easeInEaseOut);
+      setKeyboardVisible(true);
+      setGoalsExpanded(false);
+    });
+
+    // willHide: hide GoalsPanel early (smooth, before keyboard finishes moving)
+    const wL = Platform.OS === "ios"
+      ? Keyboard.addListener(willHide, () => {
+          LayoutAnimation.configureNext(LayoutAnimation.Presets.easeInEaseOut);
+          setKeyboardVisible(false);
+        })
+      : null;
+
+    // didHide: reset editing state only after keyboard is fully gone
+    // Covers every dismiss path: gesture, system, tap-outside, button.
+    const dL = Keyboard.addListener(didHide, () => {
+      LayoutAnimation.configureNext(LayoutAnimation.Presets.easeInEaseOut);
+      setKeyboardVisible(false); // no-op on iOS (already false), needed on Android
+      if (!isListeningRef.current) {
+        setIsEditing(false);
+      }
+    });
+
+    return () => {
+      sL.remove();
+      wL?.remove();
+      dL.remove();
+    };
+  }, []);
+
+  /* re-center swiper whenever selectedDate changes (swipe or calendar pick) */
+  useEffect(() => {
+    swipeRef.current?.scrollTo({ x: width, animated: false });
+  }, [selectedDate, width]);
+
+  useEffect(() => {
+    if (!transcript) return;
+
+    const base = dictationBaseTextRef.current.trim();
+    const nextText = [base, transcript].filter(Boolean).join(" ").trim();
+    setText(nextText);
+
+    if (!isEditing) {
+      LayoutAnimation.configureNext(LayoutAnimation.Presets.easeInEaseOut);
+      setIsEditing(true);
+      setTimeout(() => inputRef.current?.focus(), 50);
+    }
+  }, [transcript, isEditing]);
+
+  /* handlers -------------------------------------------------------------- */
+  const handleDaySwipe = useCallback((e) => {
+    const x = e.nativeEvent.contentOffset.x;
+    if (x < width * 0.5) {
+      Keyboard.dismiss();
+      setIsEditing(false);
+      setText("");
+      setDate(offsetDay(selectedDate, -1));
+    } else if (x > width * 1.5) {
+      Keyboard.dismiss();
+      setIsEditing(false);
+      setText("");
+      setDate(offsetDay(selectedDate, +1));
+    }
+    // If user bounced back to center, no state change needed
+  }, [selectedDate, setDate, width]);
+
   const handleStartEditing = useCallback(() => {
+    LayoutAnimation.configureNext(LayoutAnimation.Presets.easeInEaseOut);
     setIsEditing(true);
     setTimeout(() => inputRef.current?.focus(), 50);
   }, []);
 
-  const handleDismissKeyboard = useCallback(() => {
-    Keyboard.dismiss();
-    setIsEditing(false);
-    setText("");
-  }, []);
-
+  // Submit on Enter — no explicit Save button needed
   const handleSubmit = useCallback(async () => {
+    if (isListening) {
+      stopListening();
+    }
+
     const raw = text.trim();
-    if (!raw) return;
+    if (!raw) {
+      Keyboard.dismiss();
+      setIsEditing(false);
+      return;
+    }
+
     await addTextEntry(raw);
     setText("");
+    clearTranscript();
+    dictationBaseTextRef.current = "";
     Keyboard.dismiss();
     setIsEditing(false);
     setTimeout(() => scrollRef.current?.scrollToEnd({ animated: true }), 100);
-  }, [text, addTextEntry]);
+  }, [text, addTextEntry, clearTranscript, isListening, stopListening]);
 
-  const handleToggleMic = useCallback(() => {
-    setIsListening((prev) => !prev);
-  }, []);
+  const handleDismissKeyboard = useCallback(() => {
+    if (isListening) {
+      stopListening();
+    }
+    Keyboard.dismiss();
+    setIsEditing(false);
+  }, [isListening, stopListening]);
+
+  const handleToggleMic = useCallback(async () => {
+    if (isListening) {
+      stopListening();
+      return;
+    }
+
+    LayoutAnimation.configureNext(LayoutAnimation.Presets.easeInEaseOut);
+    setIsEditing(true);
+    setTimeout(() => inputRef.current?.focus(), 50);
+
+    dictationBaseTextRef.current = text.trim();
+    const started = await startListening();
+    if (!started) {
+      dictationBaseTextRef.current = "";
+    }
+  }, [isListening, startListening, stopListening, text]);
+
+  const handlePickImage = useCallback(async (source = "library") => {
+    try {
+      if (Platform.OS !== "web") {
+        const permission =
+          source === "camera"
+            ? await ImagePicker.requestCameraPermissionsAsync()
+            : await ImagePicker.requestMediaLibraryPermissionsAsync();
+
+        if (!permission?.granted) {
+          Alert.alert(
+            "Permissao necessaria",
+            source === "camera"
+              ? "Permita acesso a camera para anexar fotos no chat."
+              : "Permita acesso a biblioteca de fotos para anexar imagens no chat.",
+          );
+          return;
+        }
+      }
+
+      const picker =
+        source === "camera"
+          ? ImagePicker.launchCameraAsync
+          : ImagePicker.launchImageLibraryAsync;
+
+      const result = await picker({
+        mediaTypes: ["images"],
+        allowsEditing: false,
+        allowsMultipleSelection: false,
+        selectionLimit: 1,
+        quality: 1,
+        presentationStyle:
+          source === "library"
+            ? ImagePicker.UIImagePickerPresentationStyle.AUTOMATIC
+            : undefined,
+        cameraType:
+          source === "camera"
+            ? ImagePicker.CameraType.back
+            : undefined,
+      });
+
+      if (result.canceled || !result.assets?.length) {
+        return;
+      }
+
+      setIsEditing(false);
+      await addImageEntry({
+        ...result.assets[0],
+        source,
+      });
+      setTimeout(() => scrollRef.current?.scrollToEnd({ animated: true }), 100);
+    } catch (cameraError) {
+      Alert.alert(
+        source === "camera"
+          ? "Nao foi possivel abrir a camera"
+          : "Nao foi possivel abrir a biblioteca",
+        cameraError?.message ||
+          "Tente novamente e, se preciso, libere acesso nas configuracoes do aparelho.",
+      );
+    }
+  }, [addImageEntry]);
 
   const handleOpenCamera = useCallback(() => {
-    console.log("Camera pressed");
-  }, []);
+    if (Platform.OS === "ios") {
+      ActionSheetIOS.showActionSheetWithOptions(
+        {
+          options: ["Cancelar", "Choose from Library", "Take Photo"],
+          cancelButtonIndex: 0,
+        },
+        (buttonIndex) => {
+          if (buttonIndex === 1) {
+            void handlePickImage("library");
+          }
+          if (buttonIndex === 2) {
+            void handlePickImage("camera");
+          }
+        },
+      );
+      return;
+    }
+
+    if (Platform.OS === "android") {
+      Alert.alert(
+        "Adicionar imagem",
+        "Escolha de onde enviar a foto.",
+        [
+          { text: "Cancelar", style: "cancel" },
+          { text: "Biblioteca", onPress: () => void handlePickImage("library") },
+          { text: "Camera", onPress: () => void handlePickImage("camera") },
+        ],
+      );
+      return;
+    }
+
+    void handlePickImage("library");
+  }, [handlePickImage]);
 
   const handleAddSavedMeal = useCallback(() => {
-    console.log("Add saved meal pressed");
-  }, []);
+    const currentText = text.trim();
+    const latestEntry = entries[entries.length - 1];
+    const sourceText =
+      currentText ||
+      latestEntry?.rawText?.trim() ||
+      latestEntry?.parsedResult?.items?.map((item) => item.name).join(", ") ||
+      "";
 
-  const goToDay = useCallback(
-    (offset) => {
-      const d = new Date(`${selectedDate}T12:00:00`);
-      d.setDate(d.getDate() + offset);
-      setDate(toDateStr(d));
-    },
-    [selectedDate, setDate],
-  );
+    if (!sourceText) {
+      handleStartEditing();
+      Alert.alert(
+        "Nada para salvar",
+        "Digite uma refeicao primeiro para salvar como refeicao padrao.",
+      );
+      return;
+    }
 
-  const openCalendar = useCallback(() => {
-    calendarSheetRef.current?.expand();
-  }, []);
+    const parsedResult =
+      currentText
+        ? estimateNutritionFromText(sourceText, savedMeals)
+        : latestEntry?.parsedResult ?? estimateNutritionFromText(sourceText, savedMeals);
 
+    const suggestedName =
+      sourceText.length > 40 ? `${sourceText.slice(0, 40).trim()}...` : sourceText;
+
+    setPendingSavedMeal({
+      items: sourceText,
+      totals: parsedResult.totals,
+    });
+    setSavedMealName(suggestedName);
+    setSaveMealModalVisible(true);
+  }, [entries, handleStartEditing, savedMeals, text]);
+
+  const handleConfirmSaveMeal = useCallback(() => {
+    const name = savedMealName.trim();
+    if (!name || !pendingSavedMeal) return;
+
+    addSavedMeal({
+      name,
+      items: pendingSavedMeal.items,
+      calories: pendingSavedMeal.totals.calories,
+      protein_g: pendingSavedMeal.totals.protein_g,
+      carbs_g: pendingSavedMeal.totals.carbs_g,
+      fat_g: pendingSavedMeal.totals.fat_g,
+    });
+
+    setSaveMealModalVisible(false);
+    setSavedMealName("");
+    setPendingSavedMeal(null);
+    Alert.alert("Saved meal criada", `"${name}" foi salva para reutilizar no chat.`);
+  }, [addSavedMeal, pendingSavedMeal, savedMealName]);
+
+  const handleDeleteSavedMeal = useCallback((meal) => {
+    Alert.alert(
+      "Excluir refeicao salva?",
+      `A refeicao "${meal.name}" sera removida da lista.`,
+      [
+        { text: "Cancelar", style: "cancel" },
+        {
+          text: "Excluir",
+          style: "destructive",
+          onPress: () => removeSavedMeal(meal.id),
+        },
+      ],
+    );
+  }, [removeSavedMeal]);
+
+  const handleToggleGoals = useCallback(() => setGoalsExpanded((v) => !v), []);
+
+  const openCalendar = useCallback(() => calSheetRef.current?.expand(), []);
   const openSettings = useCallback(() => {
+    setSettingsView("main");
     settingsSheetRef.current?.expand();
   }, []);
+  const closeCalendar = useCallback(() => calSheetRef.current?.close(), []);
+  const closeSettings = useCallback(() => {
+    setSettingsView("main");
+    settingsSheetRef.current?.close();
+  }, []);
 
-  const markedDates = useMemo(
-    () => ({
+  const markedDates = useMemo(() => {
+    const marks = {
       [selectedDate]: {
         selected: true,
         selectedColor: colors.accentGreen,
+        selectedTextColor: "#000",
       },
-    }),
-    [selectedDate],
-  );
+    };
+    if (selectedDate !== todayStr) {
+      marks[todayStr] = {
+        marked: true,
+        dotColor: colors.accentPurple,
+        customStyles: {
+          container: {
+            borderWidth: 2,
+            borderColor: colors.accentPurple,
+            borderRadius: 18,
+          },
+          text: { color: colors.accentPurple, fontWeight: "600" },
+        },
+      };
+    }
+    return marks;
+  }, [selectedDate, todayStr]);
 
+  /* render ---------------------------------------------------------------- */
   return (
-    <View style={[styles.root, { backgroundColor: colors.bgPrimary }]}>
+    <View style={styles.root}>
       <StatusBar style="light" />
 
-      {/* Header */}
+      {/* ── Header ──────────────────────────────────────────────────────── */}
       <View style={[styles.header, { paddingTop: insets.top + 12 }]}>
+        {/* Logo */}
         <Text style={styles.logo}>🥗</Text>
 
         {/* Date pill */}
-        <View style={styles.datePillContainer}>
-          <TouchableOpacity onPress={() => goToDay(-1)} activeOpacity={0.6}>
-            <GlassView
-              isInteractive={true}
-              style={[
-                styles.arrowBtn,
-                isLiquidGlassAvailable()
-                  ? {}
-                  : { backgroundColor: "rgba(255, 255, 255, 0.1)" },
-              ]}
-            >
-              <Text style={styles.arrowText}>‹</Text>
-            </GlassView>
-          </TouchableOpacity>
-
-          <TouchableOpacity onPress={openCalendar} activeOpacity={0.6}>
-            <GlassView
-              isInteractive={true}
-              style={[
-                styles.datePill,
-                isLiquidGlassAvailable()
-                  ? {}
-                  : { backgroundColor: "rgba(255, 255, 255, 0.1)" },
-              ]}
-            >
-              <Text style={styles.dateLabel}>{dateLabel}</Text>
-            </GlassView>
-          </TouchableOpacity>
-
-          <TouchableOpacity onPress={() => goToDay(1)} activeOpacity={0.6}>
-            <GlassView
-              isInteractive={true}
-              style={[
-                styles.arrowBtn,
-                isLiquidGlassAvailable()
-                  ? {}
-                  : { backgroundColor: "rgba(255, 255, 255, 0.1)" },
-              ]}
-            >
-              <Text style={styles.arrowText}>›</Text>
-            </GlassView>
-          </TouchableOpacity>
-        </View>
-
-        {/* Streak + settings */}
-        <View style={styles.headerRight}>
-          <GlassView
-            isInteractive={true}
-            style={[
-              styles.streakPill,
-              isLiquidGlassAvailable()
-                ? {}
-                : { backgroundColor: "rgba(255, 255, 255, 0.1)" },
-            ]}
-          >
-            <Text style={styles.streakText}>🔥 1</Text>
+        <TouchableOpacity onPress={openCalendar} activeOpacity={0.7}>
+          <GlassView isInteractive style={[styles.datePill, glass("rgba(255,255,255,0.10)")]}>
+            <Text style={styles.dateLabel}>{dateLabel}</Text>
           </GlassView>
-          <TouchableOpacity activeOpacity={0.7} onPress={openSettings}>
-            <GlassView
-              isInteractive={true}
-              style={[
-                styles.settingsBtn,
-                isLiquidGlassAvailable()
-                  ? {}
-                  : { backgroundColor: "rgba(255, 255, 255, 0.1)" },
-              ]}
-            >
-              <Text style={styles.settingsIcon}>⚙️</Text>
-            </GlassView>
-          </TouchableOpacity>
-        </View>
+        </TouchableOpacity>
+
+        {/* Streak + settings pill — same family as date pill */}
+        <TouchableOpacity onPress={openSettings} activeOpacity={0.7}>
+          <GlassView isInteractive style={[styles.rightPill, glass("rgba(255,255,255,0.10)")]}>
+            <Text style={styles.streakText}>🔥</Text>
+            <Text style={styles.streakCount}>1</Text>
+            <View style={styles.pillDivider} />
+            {Platform.OS === "ios" ? (
+              <SymbolView
+                name="gear"
+                style={styles.gearSymbol}
+                type="monochrome"
+                tintColor={colors.textSecondary}
+              />
+            ) : (
+              <Text style={styles.gearIcon}>⚙</Text>
+            )}
+          </GlassView>
+        </TouchableOpacity>
       </View>
 
+      {/* ── Content ─────────────────────────────────────────────────────── */}
       <KeyboardAvoidingView
         style={styles.flex}
         behavior={Platform.OS === "ios" ? "padding" : "height"}
         keyboardVerticalOffset={0}
       >
+        {/* ── 3-page horizontal day swiper ────────────────────────────── */}
         <ScrollView
-          ref={scrollRef}
-          style={styles.flex}
-          contentContainerStyle={styles.scrollContent}
+          ref={swipeRef}
+          horizontal
+          pagingEnabled
+          showsHorizontalScrollIndicator={false}
+          scrollEventThrottle={16}
+          scrollEnabled={!keyboardVisible}
+          onMomentumScrollEnd={handleDaySwipe}
           keyboardShouldPersistTaps="handled"
-          showsVerticalScrollIndicator={false}
+          style={styles.flex}
+          contentOffset={{ x: width, y: 0 }}
         >
-          {isEditing ? (
-            <View style={styles.inputContainer}>
-              <TextInput
-                ref={inputRef}
-                value={text}
-                onChangeText={setText}
-                placeholder="O que você comeu?..."
-                placeholderTextColor={colors.systemGray3}
-                style={styles.textInput}
-                multiline
-                autoFocus
-                returnKeyType="done"
-                onSubmitEditing={handleSubmit}
-                blurOnSubmit={false}
-              />
-              <View style={styles.inputActions}>
-                <TouchableOpacity
-                  onPress={handleDismissKeyboard}
-                  style={styles.cancelBtn}
-                >
-                  <Text style={styles.cancelText}>Cancelar</Text>
-                </TouchableOpacity>
-                <TouchableOpacity
-                  onPress={handleSubmit}
-                  style={[
-                    styles.saveBtn,
-                    {
-                      backgroundColor: text.trim()
-                        ? colors.accentGreen
-                        : colors.glassBg,
-                    },
-                  ]}
-                >
-                  <Text
-                    style={[
-                      styles.saveText,
-                      { color: text.trim() ? "#000" : colors.systemGray3 },
-                    ]}
-                  >
-                    Salvar
-                  </Text>
-                </TouchableOpacity>
-              </View>
-            </View>
-          ) : entries.length === 0 ? (
-            <TouchableOpacity onPress={handleStartEditing} activeOpacity={0.6}>
-              <Text style={styles.placeholder}>
-                Comece a registrar suas refeições...
-              </Text>
-            </TouchableOpacity>
-          ) : (
-            <>
-              {entries.map((entry) => (
-                <MealEntryCard key={entry.id} entry={entry} />
-              ))}
-              <TouchableOpacity
-                onPress={handleStartEditing}
-                style={styles.addMoreBtn}
-                activeOpacity={0.6}
+          {[prevDate, selectedDate, nextDate].map((date, idx) => {
+            const isActive = idx === 1;
+            const dayEntries = isActive ? entries : getEntriesForDate(date);
+            return (
+              <ScrollView
+                key={date}
+                ref={isActive ? scrollRef : null}
+                style={{ width }}
+                contentContainerStyle={styles.scrollContent}
+                keyboardShouldPersistTaps="handled"
+                showsVerticalScrollIndicator={false}
               >
-                <Text style={styles.addMoreText}>+ Adicionar refeição</Text>
-              </TouchableOpacity>
-            </>
-          )}
+                {/* Listening badge — active page only */}
+                {isActive && isListening && (
+                  <View style={styles.listeningBadge}>
+                    <View style={styles.listeningDot} />
+                    <Text style={styles.listeningText}>Ouvindo…</Text>
+                  </View>
+                )}
+
+                {/* Text input — active page only */}
+                {isActive && speechError ? (
+                  <Text style={styles.errorText}>{speechError}</Text>
+                ) : null}
+
+                {isActive && isEditing ? (
+                  <TextInput
+                    ref={inputRef}
+                    value={text}
+                    onChangeText={setText}
+                    placeholder="O que você comeu?..."
+                    placeholderTextColor={colors.systemGray3}
+                    style={styles.inlineInput}
+                    multiline
+                    autoFocus
+                    returnKeyType="send"
+                    submitBehavior="submit"
+                    enablesReturnKeyAutomatically
+                    onSubmitEditing={() => {
+                      void handleSubmit();
+                    }}
+                    blurOnSubmit={false}
+                  />
+                ) : dayEntries.length === 0 ? (
+                  <TouchableOpacity
+                    onPress={isActive ? handleStartEditing : undefined}
+                    activeOpacity={isActive ? 0.5 : 1}
+                  >
+                    <Text style={styles.placeholder}>
+                      {isActive ? "Start logging your meals..." : "No entries for this day."}
+                    </Text>
+                  </TouchableOpacity>
+                ) : (
+                  <>
+                    {dayEntries.map((entry) => (
+                      <MealEntryCard key={entry.id} entry={entry} />
+                    ))}
+                    {isActive && (
+                      <TouchableOpacity
+                        onPress={handleStartEditing}
+                        style={styles.addMoreBtn}
+                        activeOpacity={0.5}
+                      >
+                        <Text style={styles.addMoreText}>+ Adicionar refeição</Text>
+                      </TouchableOpacity>
+                    )}
+                  </>
+                )}
+              </ScrollView>
+            );
+          })}
         </ScrollView>
 
+        {/* ── GoalsPanel — animated, collapsed by default ─────────────── */}
+        <AnimatePresence>
+          {goalsExpanded && !keyboardVisible && (
+            <MotiView
+              from={{ opacity: 0, translateY: 16 }}
+              animate={{ opacity: 1, translateY: 0 }}
+              exit={{ opacity: 0, translateY: 16 }}
+              transition={{ type: "timing", duration: 220 }}
+            >
+              <GoalsPanel totals={totals} />
+            </MotiView>
+          )}
+        </AnimatePresence>
+
+        {/* ── ActionBar ───────────────────────────────────────────────── */}
         <ActionBar
           totals={totals}
           isEditing={isEditing}
           isListening={isListening}
+          goalsExpanded={goalsExpanded}
+          onToggleGoals={handleToggleGoals}
           onToggleMic={handleToggleMic}
           onOpenCamera={handleOpenCamera}
           onAddSavedMeal={handleAddSavedMeal}
           onDismissKeyboard={handleDismissKeyboard}
+          onStartEditing={handleStartEditing}
         />
       </KeyboardAvoidingView>
 
-      {/* Calendar Bottom Sheet */}
+      {/* ── Calendar sheet ──────────────────────────────────────────────── */}
       <BottomSheet
-        ref={calendarSheetRef}
+        ref={calSheetRef}
         index={-1}
-        snapPoints={["75%"]}
+        snapPoints={["65%"]}
         enablePanDownToClose
-        backgroundStyle={{ backgroundColor: colors.bgPrimary }}
-        handleIndicatorStyle={{ backgroundColor: colors.systemGray }}
+        backgroundStyle={styles.sheetBg}
+        handleIndicatorStyle={styles.sheetHandle}
       >
-        <BottomSheetView style={styles.sheetContent}>
-          <Text style={styles.sheetTitle}>Selecione uma data</Text>
+        <BottomSheetView style={styles.calSheet}>
+          {/* Today | Apr 2026 | Done */}
+          <View style={styles.calHeader}>
+            <TouchableOpacity
+              onPress={() => { setDate(todayStr); closeCalendar(); }}
+              activeOpacity={0.7}
+            >
+              <Text style={styles.calAction}>Today</Text>
+            </TouchableOpacity>
+            <Text style={styles.calMonth}>{monthYearLabel}</Text>
+            <TouchableOpacity onPress={closeCalendar} activeOpacity={0.7}>
+              <Text style={styles.calAction}>Done</Text>
+            </TouchableOpacity>
+          </View>
+
           <Calendar
             current={selectedDate}
-            onDayPress={(day) => {
-              setDate(day.dateString);
-              calendarSheetRef.current?.close();
-            }}
+            onDayPress={(day) => { setDate(day.dateString); closeCalendar(); }}
             markedDates={markedDates}
+            markingType="custom"
+            hideArrows={false}
+            renderArrow={(dir) => (
+              <Text style={styles.calArrow}>{dir === "left" ? "‹" : "›"}</Text>
+            )}
             theme={{
               calendarBackground: "transparent",
-              textSectionTitleColor: colors.systemGray,
+              textSectionTitleColor: colors.systemGray2,
               selectedDayBackgroundColor: colors.accentGreen,
               selectedDayTextColor: "#000",
-              todayTextColor: colors.accentGreen,
+              todayTextColor: colors.accentPurple,
               dayTextColor: colors.textPrimary,
               textDisabledColor: colors.systemGray3,
-              monthTextColor: colors.textPrimary,
-              textMonthFontWeight: "600",
+              monthTextColor: "transparent",
+              textMonthFontSize: 0,
               textDayFontSize: 16,
-              textMonthFontSize: 18,
+              textDayFontWeight: "400",
+              textDayHeaderFontSize: 13,
+              textDayHeaderFontWeight: "500",
+              "stylesheet.calendar.header": {
+                header: { height: 0, overflow: "hidden" },
+              },
             }}
           />
         </BottomSheetView>
       </BottomSheet>
 
-      {/* Settings Bottom Sheet */}
+      {/* ── Settings sheet ──────────────────────────────────────────────── */}
       <BottomSheet
         ref={settingsSheetRef}
         index={-1}
-        snapPoints={["85%"]}
+        snapPoints={["90%"]}
         enablePanDownToClose
-        backgroundStyle={{ backgroundColor: colors.bgPrimary }}
-        handleIndicatorStyle={{ backgroundColor: colors.systemGray }}
+        backgroundStyle={styles.sheetBg}
+        handleIndicatorStyle={styles.sheetHandle}
       >
-        <BottomSheetScrollView style={styles.sheetContent}>
-          <Text style={styles.sheetTitle}>Configurações</Text>
+        <BottomSheetScrollView
+          contentContainerStyle={[styles.settingsContent, { paddingBottom: insets.bottom + 32 }]}
+        >
+          {/* Header */}
+          <View style={sS.header}>
+            <Text style={sS.title}>Settings</Text>
+            <TouchableOpacity onPress={closeSettings} activeOpacity={0.7} style={sS.closeBtn}>
+              <Text style={sS.closeBtnText}>✕</Text>
+            </TouchableOpacity>
+          </View>
 
-          <Text style={styles.sectionHeader}>METAS DIÁRIAS</Text>
-          <GlassView
-            isInteractive={true}
-            style={[
-              styles.settingsCard,
-              isLiquidGlassAvailable()
-                ? {}
-                : { backgroundColor: "rgba(255, 255, 255, 0.1)" },
-            ]}
-          >
-            <SettingsRow label="Calorias" value="2000 kcal" />
-            <View style={styles.separator} />
-            <SettingsRow label="Proteína" value="150 g" />
-            <View style={styles.separator} />
-            <SettingsRow label="Carboidratos" value="250 g" />
-            <View style={styles.separator} />
-            <SettingsRow label="Gordura" value="65 g" />
-          </GlassView>
+          {/* Profile */}
+          <Card>
+            <NavRow label="Name"  value="Pedro Moreira" />
+            <NavRow label="Email" value="pedrohenriqmoreira@gmail.com" isLast />
+          </Card>
 
-          <Text style={styles.sectionHeader}>PREFERÊNCIAS</Text>
-          <GlassView
-            isInteractive={true}
-            style={[
-              styles.settingsCard,
-              isLiquidGlassAvailable()
-                ? {}
-                : { backgroundColor: "rgba(255, 255, 255, 0.1)" },
-            ]}
-          >
-            <SettingsRow label="Idioma" value="Português (BR)" />
-            <View style={styles.separator} />
-            <SettingsRow label="Viés calórico" value="Preciso" />
-          </GlassView>
+          <SectionTitle title="Goals & Targets" />
+          <Card>
+            <NavRow
+              badge="⚖" badgeColor="#3b82f6"
+              label="61.5 kg"
+              sublabel="🔥 2,729 cal · P 136g · C 303g · F 91g"
+            />
+            <NavRow
+              badge="📊" badgeColor="#3b82f6"
+              label="Manage Nutrition Goals"
+              onPress={() => {}} isLast
+            />
+          </Card>
 
-          <Text style={styles.sectionHeader}>DADOS</Text>
-          <GlassView
-            isInteractive={true}
-            style={[
-              styles.settingsCard,
-              isLiquidGlassAvailable()
-                ? {}
-                : { backgroundColor: "rgba(255, 255, 255, 0.1)" },
-            ]}
-          >
-            <SettingsRow label="Exportar dados" />
-            <View style={styles.separator} />
-            <SettingsRow label="Limpar cache" />
-          </GlassView>
+          <SectionTitle title="Health Profile" />
+          <Card>
+            <NavRow
+              badge="❤" badgeColor="#ef4444"
+              label="61.5 kg (current weight)"
+              sublabel="Moderately Active"
+            />
+            <NavRow
+              badge="📋" badgeColor="#ef4444"
+              label="Manage Health Info"
+              onPress={() => {}} isLast
+            />
+          </Card>
 
-          <Text style={styles.version}>NutriPal v0.1.0</Text>
+          <SectionTitle title="Weight Tracking" />
+          <Card>
+            <NavRow
+              badge="📉" badgeColor="#a855f7"
+              label="61.5 kg"
+              sublabel="Log weight to see trends"
+              onPress={() => {}} isLast
+            />
+          </Card>
+
+          <SectionTitle title="Saved Meals" />
+          <Card>
+            <NavRow
+              badge="🍽" badgeColor="#f97316"
+              label="Manage Saved Meals"
+              sublabel={savedMealsLabel}
+              onPress={() => setSettingsView("savedMeals")} isLast
+            />
+          </Card>
+
+          <SectionTitle title="Preferences" />
+          <Card>
+            <NavRow
+              badge="🔥" badgeColor="#f97316"
+              label="Calorie Estimate Bias"
+              sublabel="Accurate"
+              onPress={() => {}}
+            />
+            <ToggleRow
+              badge="🔔" badgeColor="#f97316"
+              label="Daily Tracking Reminders"
+              value={reminders}
+              onToggle={() => setReminders(v => !v)}
+              isLast
+            />
+          </Card>
+
+          <SectionTitle title="Device Settings" />
+          <Card>
+            <NavRow badge="🌙" badgeColor="#636366" label="Appearance" value="System ▾" />
+            <ToggleRow
+              badge="🕐" badgeColor="#22c55e"
+              label="Automatic Time Zone"
+              value={autoTimeZone}
+              onToggle={() => setAutoTimeZone(v => !v)}
+            />
+            <NavRow
+              badge="🎤" badgeColor="#3b82f6"
+              label="Dictation Language"
+              value="Auto-detect ▾"
+              isLast
+            />
+          </Card>
+
+          <SectionTitle title="Subscription" />
+          <Card>
+            <NavRow
+              badge="👑" badgeColor="#eab308"
+              label="Subscription Active"
+              sublabel="Tasanka 3 Apr 2025"
+            />
+            <NavRow label="Manage Subscription" onPress={() => {}} isLast />
+          </Card>
+
+          <Card>
+            <NavRow badge="⭐" badgeColor="#a855f7" label="Give Feedback" onPress={() => {}} />
+            <NavRow badge="💜" badgeColor="#a855f7" label="About the App" onPress={() => {}} isLast />
+          </Card>
+
+          {/* Destructive */}
+          <Card>
+            <NavRow badge="💬" badgeColor="#3b82f6"  label="Contact Support" onPress={() => {}} />
+            <NavRow badge="🗑"  badgeColor="#636366"  label="Clear Local Cache" onPress={() => {}} />
+            <NavRow badge="📤" badgeColor="#f97316"   label="Export Data" onPress={() => {}} />
+            <NavRow badge="⚠"  badgeColor="#ef4444"  label="Delete Account" onPress={() => {}} />
+            <NavRow badge="🚪" badgeColor="#ef4444"   label="Sign Out" onPress={() => {}} isLast />
+          </Card>
         </BottomSheetScrollView>
       </BottomSheet>
+
+      <Modal
+        animationType="slide"
+        transparent
+        visible={settingsView === "savedMeals"}
+        onRequestClose={() => setSettingsView("main")}
+      >
+        <View style={styles.modalBackdrop}>
+          <View style={[styles.modalCard, styles.managerCard]}>
+            <View style={styles.managerHeader}>
+              <TouchableOpacity
+                onPress={() => setSettingsView("main")}
+                activeOpacity={0.8}
+                style={styles.managerHeaderBtn}
+              >
+                <Text style={styles.managerHeaderBtnText}>‹</Text>
+              </TouchableOpacity>
+              <Text style={styles.managerTitle}>Saved Meals</Text>
+              <TouchableOpacity
+                onPress={() => setSettingsView("main")}
+                activeOpacity={0.8}
+                style={styles.managerHeaderBtn}
+              >
+                <Text style={styles.managerHeaderBtnText}>✕</Text>
+              </TouchableOpacity>
+            </View>
+
+            <ScrollView
+              style={styles.managerList}
+              contentContainerStyle={styles.managerListContent}
+              showsVerticalScrollIndicator={false}
+            >
+              {savedMeals.length === 0 ? (
+                <View style={styles.emptyState}>
+                  <Text style={styles.emptyTitle}>No saved meals yet</Text>
+                  <Text style={styles.emptySub}>
+                    Digite uma refeicao no chat e toque no + para salva-la com macros.
+                  </Text>
+                </View>
+              ) : (
+                savedMeals.map((meal) => (
+                  <View key={meal.id} style={styles.savedMealCard}>
+                    <View style={styles.savedMealHeader}>
+                      <Text style={styles.savedMealName}>{meal.name}</Text>
+                      <TouchableOpacity
+                        onPress={() => handleDeleteSavedMeal(meal)}
+                        activeOpacity={0.8}
+                        style={styles.deleteBtn}
+                      >
+                        <Text style={styles.deleteBtnText}>✕</Text>
+                      </TouchableOpacity>
+                    </View>
+                    <Text style={styles.savedMealMacros}>
+                      🔥 {Math.round(meal.calories)} cal · P {Math.round(meal.protein_g)}g ·
+                      {" "}C {Math.round(meal.carbs_g)}g · F {Math.round(meal.fat_g)}g
+                    </Text>
+                    <Text style={styles.savedMealItems}>{meal.items}</Text>
+                  </View>
+                ))
+              )}
+            </ScrollView>
+          </View>
+        </View>
+      </Modal>
+
+      <Modal
+        animationType="fade"
+        transparent
+        visible={saveMealModalVisible}
+        onRequestClose={() => {
+          setSaveMealModalVisible(false);
+          setPendingSavedMeal(null);
+        }}
+      >
+        <View style={styles.modalBackdrop}>
+          <View style={styles.modalCard}>
+            <Text style={styles.modalTitle}>Save meal</Text>
+            <Text style={styles.modalDescription}>
+              Escolha o nome que o usuario vai digitar depois no chat.
+            </Text>
+
+            <TextInput
+              value={savedMealName}
+              onChangeText={setSavedMealName}
+              placeholder="Ex.: cafe da manha padrao"
+              placeholderTextColor={colors.systemGray3}
+              style={styles.modalInput}
+              autoFocus
+            />
+
+            {pendingSavedMeal ? (
+              <Text style={styles.modalMacros}>
+                🔥 {Math.round(pendingSavedMeal.totals.calories)} cal · P{" "}
+                {Math.round(pendingSavedMeal.totals.protein_g)}g · C{" "}
+                {Math.round(pendingSavedMeal.totals.carbs_g)}g · F{" "}
+                {Math.round(pendingSavedMeal.totals.fat_g)}g
+              </Text>
+            ) : null}
+
+            <View style={styles.modalActions}>
+              <TouchableOpacity
+                onPress={() => {
+                  setSaveMealModalVisible(false);
+                  setPendingSavedMeal(null);
+                }}
+                activeOpacity={0.8}
+                style={styles.modalSecondaryBtn}
+              >
+                <Text style={styles.modalSecondaryText}>Cancelar</Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                onPress={handleConfirmSaveMeal}
+                activeOpacity={0.8}
+                style={styles.modalPrimaryBtn}
+              >
+                <Text style={styles.modalPrimaryText}>Salvar</Text>
+              </TouchableOpacity>
+            </View>
+          </View>
+        </View>
+      </Modal>
     </View>
   );
 }
 
+/* ── styles ────────────────────────────────────────────────────────────────── */
+
 const styles = StyleSheet.create({
-  root: {
-    flex: 1,
-  },
-  flex: {
-    flex: 1,
-  },
+  root: { flex: 1, backgroundColor: colors.bgPrimary },
+  flex: { flex: 1 },
+
+  /* Header */
   header: {
     flexDirection: "row",
     alignItems: "center",
@@ -416,161 +993,345 @@ const styles = StyleSheet.create({
     paddingHorizontal: spacing.xl,
     paddingBottom: spacing.md,
   },
-  logo: {
-    fontSize: 28,
-  },
-  datePillContainer: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: spacing.xs,
-    borderRadius: radius.full,
-    padding: spacing.xs,
-  },
-  arrowBtn: {
-    width: 32,
-    height: 32,
-    borderRadius: radius.full,
-    alignItems: "center",
-    justifyContent: "center",
-  },
-  arrowText: {
-    fontSize: 22,
-    color: colors.textPrimary,
-    lineHeight: 26,
-  },
+  logo: { fontSize: 28 },
+
+  /* Date pill */
   datePill: {
-    paddingHorizontal: spacing.lg,
-    paddingVertical: spacing.xs + 2,
+    paddingHorizontal: spacing.xl,
+    paddingVertical: spacing.sm + 3,
     borderRadius: radius.full,
     alignItems: "center",
   },
-  dateLabel: {
-    ...typography.headline,
-    fontWeight: "600",
-  },
-  headerRight: {
+  dateLabel: { ...typography.headline, fontWeight: "600" },
+
+  /* Right pill — sibling of date pill */
+  rightPill: {
     flexDirection: "row",
     alignItems: "center",
+    paddingHorizontal: spacing.md + 2,
+    paddingVertical: spacing.sm + 3,
+    borderRadius: radius.full,
     gap: spacing.xs,
-    borderRadius: radius.full,
-    padding: spacing.xs,
   },
-  streakPill: {
-    paddingHorizontal: spacing.md,
-    paddingVertical: spacing.xs,
-    borderRadius: radius.full,
+  streakText:  { fontSize: 15 },
+  streakCount: { fontSize: 14, fontWeight: "600", color: colors.textPrimary },
+  pillDivider: {
+    width: 1,
+    height: 14,
+    backgroundColor: "rgba(255,255,255,0.15)",
+    marginHorizontal: spacing.xs,
   },
-  streakText: {
-    fontSize: 14,
-    fontWeight: "600",
-    color: colors.textPrimary,
-  },
-  settingsBtn: {
-    width: 32,
-    height: 32,
-    borderRadius: radius.full,
-    alignItems: "center",
-    justifyContent: "center",
-  },
-  settingsIcon: {
-    fontSize: 16,
-  },
+  gearIcon:   { fontSize: 15, color: colors.textSecondary },
+  gearSymbol: { width: 16, height: 16 },
+
+  /* Scroll */
   scrollContent: {
     paddingHorizontal: spacing.xl,
     paddingTop: spacing.sm,
     paddingBottom: spacing.md,
     flexGrow: 1,
   },
-  inputContainer: {
-    marginBottom: spacing.md,
-  },
-  textInput: {
+
+  /* Inline input — no buttons, note-like */
+  inlineInput: {
     ...typography.body,
-    color: "rgba(255,255,255,0.9)",
+    color: "rgba(255,255,255,0.90)",
     minHeight: 60,
     textAlignVertical: "top",
+    paddingTop: spacing.xs,
   },
-  inputActions: {
-    flexDirection: "row",
-    justifyContent: "flex-end",
-    gap: spacing.sm,
-    marginTop: spacing.md,
-  },
-  cancelBtn: {
-    paddingHorizontal: spacing.lg,
-    paddingVertical: spacing.sm,
-    borderRadius: radius.md,
-  },
-  cancelText: {
-    ...typography.callout,
-    color: colors.systemGray,
-  },
-  saveBtn: {
-    paddingHorizontal: spacing.lg,
-    paddingVertical: spacing.sm,
-    borderRadius: radius.md,
-  },
-  saveText: {
-    ...typography.callout,
-    fontWeight: "600",
-  },
+
+  /* Placeholder — subtle notebook prompt */
   placeholder: {
     ...typography.body,
     color: colors.systemGray3,
-    paddingTop: spacing.sm,
+    paddingTop: spacing.xs,
   },
-  addMoreBtn: {
-    paddingVertical: spacing.md,
+  addMoreBtn: { paddingVertical: spacing.md, alignItems: "center" },
+  addMoreText: { ...typography.callout, color: colors.systemGray },
+
+  /* Listening indicator */
+  listeningBadge: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: spacing.sm,
+    alignSelf: "flex-start",
+    paddingHorizontal: 14,
+    paddingVertical: 6,
+    borderRadius: radius.full,
+    backgroundColor: "rgba(239,68,68,0.12)",
+    borderWidth: 1,
+    borderColor: "rgba(239,68,68,0.20)",
+    marginBottom: spacing.md,
+  },
+  listeningDot: {
+    width: 8, height: 8, borderRadius: 4,
+    backgroundColor: colors.accentRed,
+  },
+  listeningText: { fontSize: 13, color: colors.accentRed },
+  errorText: {
+    fontSize: 13,
+    color: colors.accentRed,
+    marginBottom: spacing.md,
+  },
+
+  /* Bottom sheets */
+  sheetBg:     { backgroundColor: colors.bgSecondary },
+  sheetHandle: { backgroundColor: colors.systemGray3 },
+
+  /* Calendar sheet */
+  calSheet:  { paddingHorizontal: spacing.xl, paddingBottom: spacing.xl },
+  calHeader: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    paddingVertical: spacing.lg,
+  },
+  calAction: { fontSize: 16, fontWeight: "500", color: colors.accentBlue },
+  calMonth:  { ...typography.headline, fontWeight: "600" },
+  calArrow:  { fontSize: 22, color: colors.textSecondary, lineHeight: 26 },
+
+  /* Settings sheet */
+  settingsContent: { paddingHorizontal: spacing.xl, paddingTop: spacing.sm },
+
+  modalBackdrop: {
+    flex: 1,
+    backgroundColor: "rgba(0,0,0,0.45)",
+    alignItems: "center",
+    justifyContent: "center",
+    paddingHorizontal: spacing.xl,
+  },
+  modalCard: {
+    width: "100%",
+    borderRadius: radius.xl,
+    padding: spacing.xl,
+    backgroundColor: colors.bgSecondary,
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: "rgba(255,255,255,0.08)",
+  },
+  managerCard: {
+    maxHeight: "78%",
+  },
+  managerHeader: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    marginBottom: spacing.lg,
+  },
+  managerHeaderBtn: {
+    width: 32,
+    height: 32,
+    borderRadius: 16,
+    backgroundColor: "rgba(255,255,255,0.08)",
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  managerHeaderBtnText: {
+    fontSize: 16,
+    color: colors.textSecondary,
+    fontWeight: "600",
+  },
+  managerTitle: {
+    ...typography.title3,
+    color: colors.textPrimary,
+  },
+  managerList: {
+    width: "100%",
+  },
+  managerListContent: {
+    gap: spacing.md,
+    paddingBottom: spacing.xs,
+  },
+  emptyState: {
+    paddingVertical: spacing.xl,
     alignItems: "center",
   },
-  addMoreText: {
-    ...typography.callout,
+  emptyTitle: {
+    ...typography.subhead,
+    color: colors.textPrimary,
+    marginBottom: spacing.xs,
+  },
+  emptySub: {
+    ...typography.footnote,
     color: colors.systemGray,
+    textAlign: "center",
   },
-  sheetContent: {
-    padding: spacing.xl,
+  savedMealCard: {
+    borderRadius: radius.lg,
+    padding: spacing.lg,
+    backgroundColor: "rgba(255,255,255,0.06)",
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: "rgba(255,255,255,0.08)",
   },
-  sheetTitle: {
-    ...typography.largeTitle,
-    marginBottom: spacing.xl,
+  savedMealHeader: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    gap: spacing.md,
   },
-  sectionHeader: {
+  savedMealName: {
+    ...typography.subhead,
+    color: colors.textPrimary,
+    flex: 1,
+  },
+  savedMealMacros: {
+    ...typography.footnote,
+    color: colors.systemGray,
+    marginTop: spacing.sm,
+  },
+  savedMealItems: {
+    ...typography.caption1,
+    color: colors.systemGray3,
+    marginTop: spacing.xs,
+  },
+  deleteBtn: {
+    width: 30,
+    height: 30,
+    borderRadius: 15,
+    alignItems: "center",
+    justifyContent: "center",
+    backgroundColor: "rgba(239,68,68,0.14)",
+  },
+  deleteBtnText: {
+    fontSize: 13,
+    color: colors.accentRed,
+    fontWeight: "700",
+  },
+  modalTitle: {
+    ...typography.title3,
+    color: colors.textPrimary,
+    marginBottom: spacing.xs,
+  },
+  modalDescription: {
+    ...typography.footnote,
+    color: colors.systemGray,
+    marginBottom: spacing.lg,
+  },
+  modalInput: {
+    ...typography.body,
+    color: colors.textPrimary,
+    borderRadius: radius.md,
+    borderWidth: 1,
+    borderColor: "rgba(255,255,255,0.10)",
+    backgroundColor: "rgba(255,255,255,0.04)",
+    paddingHorizontal: spacing.md,
+    paddingVertical: spacing.md,
+  },
+  modalMacros: {
+    ...typography.footnote,
+    color: colors.systemGray,
+    marginTop: spacing.md,
+  },
+  modalActions: {
+    flexDirection: "row",
+    justifyContent: "flex-end",
+    gap: spacing.sm,
+    marginTop: spacing.xl,
+  },
+  modalSecondaryBtn: {
+    borderRadius: radius.full,
+    paddingHorizontal: spacing.lg,
+    paddingVertical: spacing.sm + 2,
+    backgroundColor: "rgba(255,255,255,0.08)",
+  },
+  modalSecondaryText: {
+    ...typography.subhead,
+    color: colors.textSecondary,
+  },
+  modalPrimaryBtn: {
+    borderRadius: radius.full,
+    paddingHorizontal: spacing.lg,
+    paddingVertical: spacing.sm + 2,
+    backgroundColor: colors.accentGreen,
+  },
+  modalPrimaryText: {
+    ...typography.subhead,
+    color: "#000",
+    fontWeight: "700",
+  },
+});
+
+/* ── settings styles ───────────────────────────────────────────────────────── */
+const sS = StyleSheet.create({
+  header: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    paddingVertical: spacing.lg,
+  },
+  title:    { ...typography.title2 },
+  closeBtn: {
+    width: 28, height: 28, borderRadius: 14,
+    backgroundColor: "rgba(255,255,255,0.10)",
+    alignItems: "center", justifyContent: "center",
+  },
+  closeBtnText: { fontSize: 13, color: colors.textSecondary, lineHeight: 17 },
+
+  sectionTitle: {
     fontSize: 13,
     fontWeight: "500",
     color: colors.systemGray2,
-    letterSpacing: 0.5,
+    letterSpacing: 0.3,
     marginBottom: spacing.sm,
     marginTop: spacing.lg,
+    paddingHorizontal: spacing.xs,
   },
-  settingsCard: {
-    borderRadius: radius.lg,
-    overflow: "hidden",
-  },
-  settingsRow: {
+
+  /* Card */
+  card: { borderRadius: radius.lg, overflow: "hidden", marginBottom: 0 },
+
+  /* Row */
+  row: {
     flexDirection: "row",
-    justifyContent: "space-between",
     alignItems: "center",
     paddingHorizontal: spacing.lg,
-    paddingVertical: 14,
-    minHeight: 48,
+    paddingVertical: 13,
+    minHeight: 50,
+    borderBottomWidth: StyleSheet.hairlineWidth,
+    borderBottomColor: "rgba(255,255,255,0.06)",
+    gap: spacing.md,
   },
-  settingsRowLabel: {
-    ...typography.body,
+  rowLast: { borderBottomWidth: 0 },
+  rowBody: { flex: 1 },
+  rowLabel: { ...typography.subhead, fontWeight: "400" },
+  rowSub: {
+    fontSize: 12, color: colors.systemGray2,
+    marginTop: 2, letterSpacing: -0.1,
   },
-  settingsRowValue: {
-    ...typography.body,
-    color: colors.systemGray,
-  },
-  separator: {
-    height: StyleSheet.hairlineWidth,
-    backgroundColor: "rgba(255,255,255,0.08)",
-    marginLeft: spacing.lg,
-  },
-  version: {
-    ...typography.footnote,
+  rowVal:  { fontSize: 14, color: colors.systemGray },
+  chevron: { fontSize: 20, color: colors.systemGray3, lineHeight: 24 },
+
+  /* Icon — bare glyph, no container */
+  badgeIcon: {
+    fontSize: 18,
+    width: 24,
     textAlign: "center",
-    marginTop: spacing.xxl,
-    marginBottom: spacing.xxl,
-    color: colors.systemGray3,
+    flexShrink: 0,
   },
+
+  /* Toggle — liquid-glass premium treatment */
+  toggle: {
+    width: 48, height: 28, borderRadius: 14,
+    backgroundColor: "rgba(120,120,128,0.32)",
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: "rgba(255,255,255,0.14)",
+    justifyContent: "center",
+    paddingHorizontal: 2,
+    flexShrink: 0,
+  },
+  toggleOn: {
+    backgroundColor: colors.accentGreen,
+    borderColor: "rgba(255,255,255,0.22)",
+  },
+  thumb: {
+    width: 24, height: 24, borderRadius: 12,
+    backgroundColor: "#ffffff",
+    // Stronger shadow — thumb "floats" above the glass track
+    shadowColor: "#000",
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.38,
+    shadowRadius: 5,
+    elevation: 3,
+  },
+  thumbOn: { transform: [{ translateX: 20 }] },
 });

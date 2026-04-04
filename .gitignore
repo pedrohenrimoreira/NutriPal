@@ -5,6 +5,11 @@ env
 node_modules/
 dist/
 build/
+.expo/
+.expo-start-*.log
+.expo-export-check*/
+.metro-virtual/
+caches/
 
 __pycache__/
 *.py[cod]
@@ -24,6 +29,11 @@ tools/
 # Local tunnel logs
 frontend/.cloudflared*.log
 frontend/.mobile-tunnel/
+mobile/.expo/
+mobile/.expo-start-*.log
+mobile/.expo-export-check*/
+mobile/.metro-virtual/
+mobile/caches/
 
 # Local planning docs
 ROADMAP.md

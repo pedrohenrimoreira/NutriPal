@@ -38,6 +38,13 @@
           "resizeMode": "contain"
         }
       ],
+      [
+        "expo-image-picker",
+        {
+          "photosPermission": "Allow NutriPal to access your photo library so you can attach meal photos.",
+          "cameraPermission": "Allow NutriPal to access your camera to capture meal photos."
+        }
+      ],
       "expo-audio",
       [
         "expo-build-properties",
