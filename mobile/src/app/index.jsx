@@ -26,12 +26,13 @@ import { AnimatePresence, MotiView } from "moti";
 
 import { useJournalStore, useDailyTotals, getEntriesForDate } from "../store/journalStore";
 import { useSettingsStore } from "../store/settingsStore";
+import { useThemeStore } from "../store/themeStore";
 import { estimateNutritionFromText } from "../utils/nutrition";
 import { useSpeechRecognition } from "../hooks/useSpeechRecognition";
 import { MealEntryCard } from "../components/journal/MealEntryCard";
 import { ActionBar } from "../components/journal/ActionBar";
 import { GoalsPanel } from "../components/journal/GoalsPanel";
-import { colors, darkColors, lightColors, spacing, radius, typography } from "../theme";
+import { colors, spacing, radius, typography } from "../theme";
 
 const WEB_TOP_INSET = Platform.OS === "web" ? 16 : 0;
 const WEB_BOTTOM_INSET = Platform.OS === "web" ? 34 : 0;
@@ -202,24 +203,16 @@ export default function Index() {
     clearTranscript,
   } = useSpeechRecognition();
 
-  /* theme — computed from colorMode state (no useColorScheme hook needed) -- */
-  const [colorMode, setColorMode] = useState("dark");
-  const C = colorMode === "dark" ? darkColors : lightColors;
-  useEffect(() => {
-    try {
-      if (typeof Appearance.setColorScheme === "function") {
-        Appearance.setColorScheme(colorMode);
-      }
-    } catch (_) { /* web may not support setColorScheme */ }
-  }, [colorMode]);
-  const handleToggleAppearance = useCallback(
-    (mode) => setColorMode(mode),
-    [],
-  );
+  /* theme — reactive via Zustand (safe on web, no hook-context issues) ------ */
+  const C = useThemeStore((s) => s.colors);
+  const colorMode = useThemeStore((s) => s.colorMode);
+  const setColorMode = useThemeStore((s) => s.setColorMode);
+  const handleToggleAppearance = useCallback((mode) => setColorMode(mode), [setColorMode]);
 
   const [isEditing, setIsEditing] = useState(false);
   const [text, setText] = useState("");
   const [keyboardVisible, setKeyboardVisible] = useState(false);
+  const [keyboardHeight, setKeyboardHeight] = useState(0);
   const [goalsExpanded, setGoalsExpanded] = useState(false);
   const [autoTimeZone, setAutoTimeZone] = useState(true);
   const [reminders, setReminders] = useState(false);
@@ -241,6 +234,8 @@ export default function Index() {
   const prevDate = useMemo(() => offsetDay(selectedDate, -1), [selectedDate]);
   const nextDate = useMemo(() => offsetDay(selectedDate, +1), [selectedDate]);
 
+  const isThinking = useMemo(() => entries.some((e) => e.isProcessing), [entries]);
+
   const todayStr = useMemo(() => toDateStr(new Date()), []);
   const dateLabel = useMemo(() => formatDateLabel(selectedDate), [selectedDate]);
   const monthYearLabel = useMemo(() => formatMonthYear(selectedDate), [selectedDate]);
@@ -259,10 +254,11 @@ export default function Index() {
     const willHide = Platform.OS === "ios" ? "keyboardWillHide" : "keyboardDidHide";
     const didHide  = "keyboardDidHide";
 
-    // Show: mark visible + collapse goals immediately
-    const sL = Keyboard.addListener(willShow, () => {
+    // Show: mark visible + collapse goals + capture keyboard height
+    const sL = Keyboard.addListener(willShow, (e) => {
       LayoutAnimation.configureNext(LayoutAnimation.Presets.easeInEaseOut);
       setKeyboardVisible(true);
+      setKeyboardHeight(e.endCoordinates?.height ?? 0);
       setGoalsExpanded(false);
     });
 
@@ -271,6 +267,7 @@ export default function Index() {
       ? Keyboard.addListener(willHide, () => {
           LayoutAnimation.configureNext(LayoutAnimation.Presets.easeInEaseOut);
           setKeyboardVisible(false);
+          setKeyboardHeight(0);
         })
       : null;
 
@@ -279,6 +276,7 @@ export default function Index() {
     const dL = Keyboard.addListener(didHide, () => {
       LayoutAnimation.configureNext(LayoutAnimation.Presets.easeInEaseOut);
       setKeyboardVisible(false); // no-op on iOS (already false), needed on Android
+      setKeyboardHeight(0);
       if (!isListeningRef.current) {
         setIsEditing(false);
       }
@@ -612,7 +610,9 @@ export default function Index() {
               <Text style={styles.streakText}>🔥</Text>
               <Text style={styles.streakCount}>1</Text>
               <View style={styles.pillDivider} />
-              {Platform.OS === "ios" ? (
+              {isThinking ? (
+                <Text style={styles.thinkingText}>Thinking...</Text>
+              ) : Platform.OS === "ios" ? (
                 <SymbolView
                   name="gear"
                   style={styles.gearSymbol}
@@ -694,13 +694,9 @@ export default function Index() {
                           : "Continuar a anotar..."
                       }
                       placeholderTextColor={colors.systemGray3}
-                      style={styles.inlineInput}
+                      style={[styles.inlineInput, { color: C.textPrimary }]}
                       multiline
                       autoFocus
-                      returnKeyType="send"
-                      submitBehavior="submit"
-                      enablesReturnKeyAutomatically
-                      onSubmitEditing={() => void handleSubmit()}
                       blurOnSubmit={false}
                     />
                   ) : (
@@ -729,7 +725,15 @@ export default function Index() {
         </ScrollView>
 
         {/* ── Bottom area: GoalsPanel + ActionBar pinned to bottom ─────── */}
-        <View style={[styles.bottomContainer, { paddingBottom: insets.bottom + WEB_BOTTOM_INSET }]}>
+        <View style={[
+          styles.bottomContainer,
+          {
+            bottom: keyboardVisible
+              ? keyboardHeight
+              : insets.bottom + WEB_BOTTOM_INSET,
+            paddingBottom: keyboardVisible ? 0 : undefined,
+          },
+        ]}>
           <AnimatePresence>
             {goalsExpanded && !keyboardVisible && (
               <MotiView
@@ -759,6 +763,7 @@ export default function Index() {
             onAddSavedMeal={handleAddSavedMeal}
             onDismissKeyboard={handleDismissKeyboard}
             onStartEditing={handleStartEditing}
+            onLogEntry={() => void handleSubmit()}
           />
         </View>
       </KeyboardAvoidingView>
@@ -1212,6 +1217,7 @@ const styles = StyleSheet.create({
   },
   gearIcon:   { fontSize: 15, color: colors.textSecondary },
   gearSymbol: { width: 16, height: 16 },
+  thinkingText: { fontSize: 12, color: colors.accentBlue, fontWeight: "500", letterSpacing: -0.1 },
 
   /* Scroll — extra paddingBottom clears the absolute bottom bar */
   scrollContent: {

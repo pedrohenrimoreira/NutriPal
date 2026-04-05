@@ -8,6 +8,7 @@
 import React from "react";
 import { View, Text, StyleSheet } from "react-native";
 import { Image } from "expo-image";
+import { useThemeStore } from "../../store/themeStore";
 import { colors, spacing, radius, typography } from "../../theme";
 
 function resolveImageAsset(entry) {
@@ -30,6 +31,8 @@ function buildImageCaption(imageAsset) {
 }
 
 export function MealEntryCard({ entry }) {
+  const C = useThemeStore((s) => s.colors);
+
   const time = new Date(entry.createdAt).toLocaleTimeString("pt-BR", {
     hour: "2-digit",
     minute: "2-digit",
@@ -38,22 +41,21 @@ export function MealEntryCard({ entry }) {
   const imageAsset = resolveImageAsset(entry);
   const imageCaption = buildImageCaption(imageAsset);
 
-  // Only show rawText for text-only entries (image entries speak for themselves)
   const showText = Boolean(entry.rawText?.trim()) && !imageAsset?.uri;
   const hasBreakdown =
     !entry.isProcessing &&
     entry.parsedResult?.items?.length > 0;
 
   return (
-    <View style={styles.entry}>
+    <View style={[styles.entry, { borderBottomColor: C.separator }]}>
       {/* ── Meta row: time · processing indicator · kcal ─────────────── */}
       <View style={styles.meta}>
-        <Text style={styles.time}>{time}</Text>
+        <Text style={[styles.time, { color: C.textTertiary }]}>{time}</Text>
         <View style={styles.metaRight}>
           {entry.isProcessing ? (
-            <Text style={styles.processing}>analisando</Text>
+            <Text style={[styles.processing, { color: C.textTertiary }]}>analisando</Text>
           ) : entry.parsedResult ? (
-            <Text style={styles.kcal}>
+            <Text style={[styles.kcal, { color: C.textSecondary }]}>
               {Math.round(entry.parsedResult.totals.calories)} kcal
             </Text>
           ) : null}
@@ -62,7 +64,7 @@ export function MealEntryCard({ entry }) {
 
       {/* ── Body text ─────────────────────────────────────────────────── */}
       {showText && (
-        <Text style={styles.body}>{entry.rawText}</Text>
+        <Text style={[styles.body, { color: C.textPrimary }]}>{entry.rawText}</Text>
       )}
 
       {/* ── Photo ─────────────────────────────────────────────────────── */}
@@ -75,7 +77,7 @@ export function MealEntryCard({ entry }) {
             transition={200}
           />
           {imageCaption ? (
-            <Text style={styles.imageCaption} numberOfLines={1}>
+            <Text style={[styles.imageCaption, { color: C.textTertiary }]} numberOfLines={1}>
               {imageCaption}
             </Text>
           ) : null}
@@ -86,10 +88,10 @@ export function MealEntryCard({ entry }) {
       {hasBreakdown && (
         <View style={styles.breakdown}>
           {entry.parsedResult.items.map((item, i) => (
-            <Text key={`${item.name}-${i}`} style={styles.breakdownItem}>
+            <Text key={`${item.name}-${i}`} style={[styles.breakdownItem, { color: C.textSecondary }]}>
               {item.name}
-              <Text style={styles.breakdownDot}> · </Text>
-              <Text style={styles.breakdownCal}>{item.calories} kcal</Text>
+              <Text style={[styles.breakdownDot, { color: C.textTertiary }]}> · </Text>
+              <Text style={[styles.breakdownCal, { color: C.textTertiary }]}>{item.calories} kcal</Text>
             </Text>
           ))}
         </View>
@@ -99,7 +101,6 @@ export function MealEntryCard({ entry }) {
 }
 
 const styles = StyleSheet.create({
-  /* Inline entry — no card, no border-box, just content */
   entry: {
     paddingTop: spacing.lg,
     paddingBottom: spacing.lg,
@@ -107,7 +108,6 @@ const styles = StyleSheet.create({
     borderBottomColor: "rgba(255,255,255,0.06)",
   },
 
-  /* Meta row */
   meta: {
     flexDirection: "row",
     alignItems: "center",
@@ -138,7 +138,6 @@ const styles = StyleSheet.create({
     letterSpacing: -0.1,
   },
 
-  /* Body text — notebook style, large and natural */
   body: {
     ...typography.body,
     color: "rgba(255,255,255,0.92)",
@@ -146,7 +145,6 @@ const styles = StyleSheet.create({
     letterSpacing: -0.3,
   },
 
-  /* Photo block — borderless, full-width */
   imageBlock: {
     marginTop: spacing.sm,
   },
@@ -163,7 +161,6 @@ const styles = StyleSheet.create({
     letterSpacing: -0.1,
   },
 
-  /* Parsed items — subtle indented breakdown */
   breakdown: {
     marginTop: spacing.sm,
     gap: 3,

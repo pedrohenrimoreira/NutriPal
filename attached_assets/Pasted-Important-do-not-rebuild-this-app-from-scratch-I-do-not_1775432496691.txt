@@ -1,0 +1,368 @@
+Important: do not rebuild this app from scratch.
+
+I do not want a new project from zero.
+I do not want the whole architecture replaced.
+I want you to improve, refine and adapt the current implementation.
+
+Keep what is already working.
+Fix what is broken.
+Implement what is still missing.
+Refine the current structure instead of recreating everything.
+
+The app already exists and already has:
+- home journal screen
+- date pill
+- top-right calories/settings pill
+- writing area
+- keyboard accessory buttons
+- bottom nutrition summary
+- settings screen
+- calendar flow
+
+Do not replace these structures unnecessarily.
+Work on the existing base.
+
+==================================================
+1. CORE PRODUCT MODEL
+==================================================
+
+This app is a daily nutrition notebook.
+Each day is its own note page.
+
+It should feel like a premium iPhone-first notebook for food logging, not like:
+- a chat app
+- a form submission app
+- a dashboard-heavy calorie tracker
+
+The user should feel like they are writing naturally into a daily page.
+
+Each day must have its own:
+- written content
+- food entries
+- image-based food entries
+- nutrition summary
+- empty state if nothing exists
+- future AI interpretation results
+
+There must be one true selectedDay state.
+
+==================================================
+2. NOTEBOOK WRITING EXPERIENCE MUST FEEL NATURAL
+==================================================
+
+The writing area must behave more like Notion or a native notes-style editor.
+
+Important:
+- the user must be able to type freely
+- the user must be able to press Enter and continue writing naturally
+- after pressing Enter, the text must still behave like editable notebook content
+- the user must still be able to move the cursor and delete what was written using the keyboard
+- it must not become a frozen message
+- it must not turn into a chat bubble
+- it must not become a boxed card
+- it must not lock the content after Enter
+
+This is critical.
+
+Correct behavior:
+- typing should feel freeform
+- Enter creates natural continuation in the notebook flow
+- previously written text must still be editable
+- backspace must work even after Enter
+- the user should feel they are editing a living note, not sending messages
+
+Wrong behavior:
+- turning entered text into static sent blocks
+- turning each line into a chat item
+- preventing editing after a line break
+- treating Enter like a send action
+
+==================================================
+3. FOOD LOGGING FLOW
+==================================================
+
+Food logging must happen inside the notebook page.
+
+Expected flow:
+- user taps the notebook area
+- user types food naturally, for example: “pão de queijo”
+- the content remains inline inside the page
+- nothing should look like a sent message
+- the app stays notebook-like
+
+The UI must already be prepared for future AI interpretation.
+
+When the user types food, the top-right area where calories currently appear should support a temporary processing state.
+
+Required future-ready behavior:
+- while the AI is interpreting the food entry, the right side of the top pill should show “Thinking”
+- this should happen in the same top-right area where calories are currently displayed
+- the state should feel subtle and native
+- after processing, it can return to the calories/result state
+
+Important:
+Even when AI interpretation is active, the app must still feel like a notebook, not like a chat with replies.
+
+==================================================
+4. PREPARE THE APP FOR GEMINI INTEGRATION
+==================================================
+
+I already have a Gemini API key.
+
+Prepare the app environment so I can plug in my Gemini key cleanly later.
+
+Requirements:
+- do not hardcode the key directly in UI code
+- create a clean config/env structure for the Gemini API key
+- make it easy to insert later
+- leave the AI processing flow organized and ready for integration
+- structure the code so typed notebook content can later be sent to Gemini
+- structure the code so image-based entries can also later be analyzed by Gemini
+
+Please prepare:
+- environment variable support
+- a clear config layer
+- a service layer or API integration layer for Gemini
+- a clean placeholder processing function so later I can swap in the real Gemini call
+
+The current UI should already support future states like:
+- idle
+- thinking
+- interpreted result
+- error fallback if needed
+
+==================================================
+5. KEYBOARD ACCESSORY CONTROLS MUST FOLLOW THE KEYBOARD CORRECTLY
+==================================================
+
+Right now the buttons that should accompany the keyboard are not positioned correctly.
+
+Current problem:
+- the controls are staying pinned too low
+- they do not follow the keyboard height correctly
+- they are set near the bottom instead of sitting properly above the keyboard
+
+Fix this.
+
+Required behavior:
+- when the keyboard opens, the accessory controls must sit at the correct height directly above the keyboard
+- they must track keyboard position properly
+- they must move with the keyboard naturally
+- they must respect safe area
+- they must not stay detached at the bottom
+- they must not lag behind visually
+- they must not appear in the wrong vertical position
+
+This should feel like a true keyboard-following accessory row.
+
+Also:
+- when the keyboard closes, this row must disappear or resolve correctly
+- no orphaned controls
+- no broken bottom layout
+- no stuck floating row
+
+==================================================
+6. CAMERA BUTTON AND IMAGE FLOW
+==================================================
+
+The camera button should open a native iOS-style contextual menu.
+
+Required options:
+- Scan Menu
+- Choose from Library
+- Take Photo
+
+This menu should feel native to iOS and visually premium.
+
+After choosing an option:
+- the resulting image or scan must attach to the current day
+- it must feed into the notebook flow
+- it must feel integrated into the writing area
+- it must not open a disconnected or broken flow
+
+The image-based entry must belong to the same selected day state as typed entries.
+
+==================================================
+7. DAY NAVIGATION
+==================================================
+
+Each day is a notebook page.
+Implement or fix real day-to-day navigation.
+
+Required behavior:
+- swipe left goes to next day
+- swipe right goes to previous day
+- tapping date pill opens calendar
+- calendar selection updates selectedDay
+- all navigation methods must use the same selectedDay source of truth
+
+When changing day, update together:
+- date pill
+- notebook content
+- empty state or filled state
+- nutrition summary
+- expanded nutrition details
+
+==================================================
+8. LIGHT MODE MUST BE FIXED
+==================================================
+
+The light mode is currently not good.
+
+Current problems:
+- some places still stay too dark
+- some surfaces do not adapt properly
+- some text colors do not have enough contrast
+- some labels are hard to read
+- visual hierarchy is inconsistent
+
+Fix the light mode thoroughly.
+
+Requirements:
+- support proper light and dark themes
+- ensure every surface adapts correctly
+- ensure text contrast is readable in all important areas
+- ensure pills, cards, settings rows, notebook area and accessory controls work in both modes
+- avoid dark leftovers in light mode
+- avoid low-contrast gray-on-gray text
+- ensure icons remain readable
+- ensure the top pills and floating controls still look premium in light mode
+
+Light mode must feel intentionally designed, not like dark mode with a few colors flipped.
+
+==================================================
+9. LIQUID GLASS IMPLEMENTATION MANUAL, FOLLOW THIS
+==================================================
+
+Implement the UI following iOS Liquid Glass visual behavior.
+
+Mandatory rules:
+1. Apply Liquid Glass only to floating interface elements such as header, tab bar, bottom actions, main buttons, pills, toggles, short modals, highlight cards and overlays.
+2. Do not use Liquid Glass as the background of the whole screen, in full lists, or in long text blocks.
+3. Guarantee legibility. Text and icons on glass must keep proper contrast on both light and dark backgrounds.
+4. Prefer native iOS effect when available. On unsupported platforms or versions, use a similar fallback with light blur, translucency, subtle border and minimal shadow.
+5. Avoid too many blurred components on the same screen. Prioritize only a few high-impact elements.
+6. In animations, do not hide the effect through invalid opacity behavior if the native material does not support it. Use proper material animation or safe fallback.
+7. Always respect safe areas, native bars, iOS spacing and navigation hierarchy.
+8. Glass must feel functional, not decorative. Every glass element must have a clear navigation, action or focus role.
+9. Test behavior in scroll, in light and dark backgrounds, and in headers, checking title and button contrast.
+10. If there is doubt about where to apply the effect, apply it only to navigation controls and priority actions.
+
+My recommended implementation references:
+- official Apple Liquid Glass behavior and HIG Materials
+- iOS native materials whenever possible
+- React Native implementation through Callstack Liquid Glass or Expo GlassEffect
+- fallback through Expo BlurView
+- advanced cases through React Native Skia
+- verify real bugs and limitations with Apple Forums and GitHub issues
+
+==================================================
+10. WHERE TO APPLY LIQUID GLASS IN THIS APP
+==================================================
+
+Apply Liquid Glass mainly to:
+- date pill
+- top-right calories/settings pill
+- keyboard accessory controls
+- left calorie chip above keyboard
+- bottom nutrition summary capsule
+- expanded nutrition summary if appropriate
+- camera contextual menu
+- important toggles
+- short overlays and floating action elements
+
+Do not apply Liquid Glass to:
+- full screen background
+- full notebook text area
+- long settings lists as a whole
+- entire pages
+
+==================================================
+11. SETTINGS SCREEN REFINEMENT
+==================================================
+
+Keep the existing Settings structure.
+Do not rebuild it.
+
+Refine:
+- settings icons should be cleaner and more iOS-like
+- avoid heavy icon backgrounds when not needed
+- keep grouped rows
+- keep clean hierarchy
+- keep proper readability in light and dark mode
+
+==================================================
+12. TOGGLE SWITCHES MUST HAVE LIQUID GLASS FEEL
+==================================================
+
+Toggles are working, but they need better visual treatment.
+
+Requirements:
+- keep native usability and recognizability
+- preserve clear ON/OFF readability
+- make them visually more premium and integrated with the Liquid Glass system
+- better surface blending in dark and light mode
+- softer highlights
+- believable glass-like finish
+- do not make them flashy or unrealistic
+
+==================================================
+13. BOTTOM NUTRITION SUMMARY
+==================================================
+
+Keep and refine the current bottom nutrition summary instead of replacing it.
+
+Collapsed state:
+- compact floating summary for the selected day
+- calories + C / P / F
+- subtle and elegant
+
+Expanded state:
+- opens upward from the compact summary
+- feels like the opened state of the same component
+- shows:
+  - calories progress
+  - burned
+  - carbs
+  - protein
+  - fat
+  - sugar
+  - fiber
+  - sodium
+
+Everything must stay tied to the selected day only.
+
+==================================================
+14. IMPORTANT BUGS TO FIX
+==================================================
+
+Please review the current implementation and fix current or likely issues such as:
+- keyboard accessory row not following keyboard height
+- broken keyboard dismissal states
+- orphaned accessory controls
+- light mode surfaces staying dark
+- unreadable text in light mode
+- typed content becoming frozen or boxed after Enter
+- inability to delete/edit text after Enter
+- camera/photo results not integrating into the notebook area
+- day state not syncing correctly
+- swipe between days not updating real page content
+- top-right state not supporting future “Thinking” behavior
+- toggles not following the Liquid Glass visual system
+
+==================================================
+15. FINAL REMINDER
+==================================================
+
+Do not create a new app from zero.
+Do not throw away the existing base.
+Do not redesign everything.
+
+Instead:
+- preserve what already works
+- improve what already exists
+- adapt what is still missing
+- fix what is broken
+- make the notebook flow natural
+- prepare the app cleanly for Gemini integration
+- make keyboard behavior, light mode and Liquid Glass implementation correct

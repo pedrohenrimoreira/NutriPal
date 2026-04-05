@@ -19,6 +19,7 @@ import {
 
 import { GlassView, isLiquidGlassAvailable } from "expo-glass-effect";
 import { SymbolView } from "expo-symbols";
+import { useThemeStore } from "../../store/themeStore";
 import { colors, spacing, radius } from "../../theme";
 
 /* ── helpers ──────────────────────────────────────────────────────────────── */
@@ -75,7 +76,9 @@ export function ActionBar({
   onOpenCamera,
   onAddSavedMeal,
   onDismissKeyboard,
+  onLogEntry,
 }) {
+  const C   = useThemeStore((s) => s.colors);
   const cal   = Math.round(totals.calories);
   const carbs = Math.round(totals.carbs_g);
   const prot  = Math.round(totals.protein_g);
@@ -101,17 +104,17 @@ export function ActionBar({
             <Text style={styles.dot}>·</Text>
             <View style={styles.group}>
               <Text style={[styles.letter, { color: colors.carbs }]}>C</Text>
-              <Text style={styles.val}>{carbs}</Text>
+              <Text style={[styles.val, { color: C.textPrimary }]}>{carbs}</Text>
             </View>
             <Text style={styles.dot}>·</Text>
             <View style={styles.group}>
               <Text style={[styles.letter, { color: colors.protein }]}>P</Text>
-              <Text style={styles.val}>{prot}</Text>
+              <Text style={[styles.val, { color: C.textPrimary }]}>{prot}</Text>
             </View>
             <Text style={styles.dot}>·</Text>
             <View style={styles.group}>
               <Text style={[styles.letter, { color: colors.fat }]}>F</Text>
-              <Text style={styles.val}>{fat}</Text>
+              <Text style={[styles.val, { color: C.textPrimary }]}>{fat}</Text>
             </View>
             <Text style={[styles.chevron, goalsExpanded && styles.chevronUp]}>⌃</Text>
           </GlassView>
@@ -123,13 +126,13 @@ export function ActionBar({
   /* ─── Editing: floating accessory row — NO background strip ──────────── */
   return (
     <View style={styles.accessory}>
-      {/* Left: elongated calories capsule — same glass as action buttons */}
+      {/* Left: elongated calories capsule */}
       <GlassView
         isInteractive
         style={[styles.calCapsule, glass("rgba(255,255,255,0.10)")]}
       >
         <Text style={styles.capsuleFlame}>🔥</Text>
-        <Text style={styles.capsuleVal}>{cal}</Text>
+        <Text style={[styles.capsuleVal, { color: C.textPrimary }]}>{cal}</Text>
       </GlassView>
 
       {/* Right: circular action buttons */}
@@ -162,6 +165,14 @@ export function ActionBar({
           color={colors.textSecondary}
           onPress={onDismissKeyboard}
           label="Fechar teclado"
+        />
+        {/* Primary action: log the current entry */}
+        <ActionBtn
+          sfName="checkmark"
+          fallback="✓"
+          color={colors.accentGreen}
+          onPress={onLogEntry}
+          label="Registrar"
         />
       </View>
     </View>
@@ -200,7 +211,6 @@ const styles = StyleSheet.create({
 
   /* Accessory row ---------------------------------------------------------- */
   accessory: {
-    // ⚠ No backgroundColor, no borderTop — controls float above keyboard
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "space-between",
@@ -213,10 +223,10 @@ const styles = StyleSheet.create({
   calCapsule: {
     flexDirection: "row",
     alignItems: "center",
-    paddingHorizontal: spacing.xl + 4,   // 24 — breathing room
-    paddingVertical: spacing.sm + 4,      // 12
+    paddingHorizontal: spacing.xl + 4,
+    paddingVertical: spacing.sm + 4,
     borderRadius: radius.full,
-    overflow: "hidden",                   // required: clips BlurView to borderRadius
+    overflow: "hidden",
     gap: spacing.xs + 1,
     borderWidth: StyleSheet.hairlineWidth,
     borderColor: colors.glassBorder,
@@ -248,9 +258,7 @@ const styles = StyleSheet.create({
     alignItems: "center",
     justifyContent: "center",
   },
-  btnActive: {
-    // red tint handled via tintColor — no extra background needed
-  },
+  btnActive: {},
   symbol: {
     width: 21,
     height: 21,

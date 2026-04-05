@@ -3,16 +3,11 @@
  *
  * Expanded by the ActionBar nutrition pill tap.
  * Animated in/out by the parent (AnimatePresence + MotiView in index.jsx).
- *
- * Contents:
- *   - Calories progress bar
- *   - Burned row
- *   - 3 main macro circles: Carbs, Protein, Fat
- *   - 3 secondary circles: Sugar, Fiber, Sodium
  */
 import React from "react";
 import { View, Text, StyleSheet } from "react-native";
 import { GlassView, isLiquidGlassAvailable } from "expo-glass-effect";
+import { useThemeStore } from "../../store/themeStore";
 import { colors, spacing, radius, typography } from "../../theme";
 
 const DEFAULT_GOALS = {
@@ -40,28 +35,28 @@ function ProgressBar({ pct, color }) {
   );
 }
 
-function GoalRow({ icon, label, right }) {
+function GoalRow({ icon, label, right, C }) {
   return (
     <View style={styles.goalRow}>
       <View style={styles.goalLeft}>
         <Text style={styles.goalIcon}>{icon}</Text>
-        <Text style={styles.goalLabel}>{label}</Text>
+        <Text style={[styles.goalLabel, { color: C.textPrimary }]}>{label}</Text>
       </View>
-      <Text style={styles.goalRight}>{right}</Text>
+      <Text style={[styles.goalRight, { color: C.textSecondary }]}>{right}</Text>
     </View>
   );
 }
 
-function MacroCircle({ value, label, color }) {
+function MacroCircle({ value, label, color, C }) {
   return (
     <View style={styles.circleWrap}>
       <View style={[
         styles.circle,
-        { borderColor: value > 0 ? color : "rgba(255,255,255,0.08)" },
+        { borderColor: value > 0 ? color : C.separator },
       ]}>
-        <Text style={styles.circleVal}>{value}</Text>
+        <Text style={[styles.circleVal, { color: C.textPrimary }]}>{value}</Text>
       </View>
-      <Text style={styles.circleLabel}>{label}</Text>
+      <Text style={[styles.circleLabel, { color: C.textSecondary }]}>{label}</Text>
     </View>
   );
 }
@@ -69,6 +64,8 @@ function MacroCircle({ value, label, color }) {
 /* ── main component ────────────────────────────────────────────────────────── */
 
 export function GoalsPanel({ totals }) {
+  const C = useThemeStore((s) => s.colors);
+
   const cal   = Math.round(totals.calories);
   const carbs = Math.round(totals.carbs_g);
   const prot  = Math.round(totals.protein_g);
@@ -83,36 +80,33 @@ export function GoalsPanel({ totals }) {
         styles.card,
         isLiquidGlassAvailable()
           ? {}
-          : { backgroundColor: "rgba(255,255,255,0.09)" },
+          : { backgroundColor: C.glassBg },
       ]}
     >
-      <Text style={styles.title}>Goals</Text>
+      <Text style={[styles.title, { color: C.textPrimary }]}>Goals</Text>
 
-      {/* Calories */}
       <GoalRow
         icon="🔥"
         label="Calories"
         right={`${cal} / ${DEFAULT_GOALS.calories}`}
+        C={C}
       />
       <ProgressBar pct={calPct} color={colors.accentOrange} />
 
-      {/* Burned */}
       <View style={styles.rowGap} />
-      <GoalRow icon="🚶" label="Burned" right="0" />
+      <GoalRow icon="🚶" label="Burned" right="0" C={C} />
       <ProgressBar pct={0} color={colors.accentGreen} />
 
-      {/* Primary macros */}
       <View style={styles.circleRow}>
-        <MacroCircle value={carbs} label="Carbs"   color={colors.carbs} />
-        <MacroCircle value={prot}  label="Protein" color={colors.protein} />
-        <MacroCircle value={fat}   label="Fat"     color={colors.fat} />
+        <MacroCircle value={carbs} label="Carbs"   color={colors.carbs}   C={C} />
+        <MacroCircle value={prot}  label="Protein" color={colors.protein} C={C} />
+        <MacroCircle value={fat}   label="Fat"     color={colors.fat}     C={C} />
       </View>
 
-      {/* Secondary macros */}
       <View style={styles.circleRow}>
-        <MacroCircle value={0} label="Sugar"  color={colors.accentPink} />
-        <MacroCircle value={0} label="Fiber"  color={colors.accentGreen} />
-        <MacroCircle value={0} label="Sodium" color={colors.accentBlue} />
+        <MacroCircle value={0} label="Sugar"  color={colors.accentPink}  C={C} />
+        <MacroCircle value={0} label="Fiber"  color={colors.accentGreen} C={C} />
+        <MacroCircle value={0} label="Sodium" color={colors.accentBlue}  C={C} />
       </View>
     </GlassView>
   );
@@ -138,7 +132,6 @@ const styles = StyleSheet.create({
     marginBottom: spacing.lg,
   },
 
-  /* Goal rows */
   goalRow: {
     flexDirection: "row",
     justifyContent: "space-between",
@@ -155,7 +148,6 @@ const styles = StyleSheet.create({
   goalRight: { ...typography.footnote, color: colors.systemGray },
   rowGap:    { height: spacing.md },
 
-  /* Progress bar */
   track: {
     height: 4,
     borderRadius: 2,
@@ -165,7 +157,6 @@ const styles = StyleSheet.create({
   },
   fill: { height: "100%", borderRadius: 2 },
 
-  /* Macro circles */
   circleRow: {
     flexDirection: "row",
     justifyContent: "space-around",
