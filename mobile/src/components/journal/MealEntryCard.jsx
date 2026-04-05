@@ -1,70 +1,31 @@
 /**
- * MealEntryCard - displays a logged meal entry with liquid glass background.
+ * MealEntryCard — inline notebook entry.
+ *
+ * Renders as flowing text on the journal page, not a boxed card or bubble.
+ * Each entry is time-stamped, shows raw text, and optionally a photo or
+ * parsed nutrition breakdown — all inline, notebook-style.
  */
 import React from "react";
-import { View, Text, StyleSheet, ActivityIndicator } from "react-native";
+import { View, Text, StyleSheet } from "react-native";
 import { Image } from "expo-image";
-import { GlassView, isLiquidGlassAvailable } from "expo-glass-effect";
 import { colors, spacing, radius, typography } from "../../theme";
 
 function resolveImageAsset(entry) {
-  if (entry?.imageAsset && typeof entry.imageAsset === "object") {
-    return entry.imageAsset;
-  }
-
-  if (entry?.image && typeof entry.image === "object") {
-    return entry.image;
-  }
-
-  if (entry?.imageUri) {
-    return { uri: entry.imageUri };
-  }
-
+  if (entry?.imageAsset?.uri) return entry.imageAsset;
+  if (entry?.image?.uri) return entry.image;
+  if (entry?.imageUri) return { uri: entry.imageUri };
   return null;
 }
 
-function formatFileSize(fileSize) {
-  if (typeof fileSize !== "number" || !Number.isFinite(fileSize) || fileSize <= 0) {
-    return "";
-  }
-
-  if (fileSize < 1024) {
-    return `${fileSize} B`;
-  }
-
-  const units = ["KB", "MB", "GB"];
-  let size = fileSize / 1024;
-  let unitIndex = 0;
-
-  while (size >= 1024 && unitIndex < units.length - 1) {
-    size /= 1024;
-    unitIndex += 1;
-  }
-
-  const rounded = size >= 10 ? Math.round(size) : size.toFixed(1);
-  return `${rounded} ${units[unitIndex]}`;
-}
-
 function buildImageCaption(imageAsset) {
-  if (!imageAsset) {
-    return "";
-  }
-
+  if (!imageAsset) return "";
   const parts = [];
-
-  if (imageAsset.source) {
-    parts.push(imageAsset.source);
+  if (imageAsset.source) parts.push(imageAsset.source);
+  if (imageAsset.fileName) parts.push(imageAsset.fileName);
+  if (typeof imageAsset.fileSize === "number" && imageAsset.fileSize > 0) {
+    const kb = imageAsset.fileSize / 1024;
+    parts.push(kb < 1024 ? `${kb.toFixed(0)} KB` : `${(kb / 1024).toFixed(1)} MB`);
   }
-
-  if (imageAsset.fileName) {
-    parts.push(imageAsset.fileName);
-  }
-
-  const sizeLabel = formatFileSize(imageAsset.fileSize);
-  if (sizeLabel) {
-    parts.push(sizeLabel);
-  }
-
   return parts.join(" · ");
 }
 
@@ -73,42 +34,45 @@ export function MealEntryCard({ entry }) {
     hour: "2-digit",
     minute: "2-digit",
   });
+
   const imageAsset = resolveImageAsset(entry);
   const imageCaption = buildImageCaption(imageAsset);
 
+  // Only show rawText for text-only entries (image entries speak for themselves)
+  const showText = Boolean(entry.rawText?.trim()) && !imageAsset?.uri;
+  const hasBreakdown =
+    !entry.isProcessing &&
+    entry.parsedResult?.items?.length > 0;
+
   return (
-    <GlassView
-      isInteractive={true}
-      style={[
-        styles.card,
-        isLiquidGlassAvailable()
-          ? {}
-          : { backgroundColor: "rgba(255,255,255,0.08)" },
-      ]}
-    >
-      <View style={styles.header}>
+    <View style={styles.entry}>
+      {/* ── Meta row: time · processing indicator · kcal ─────────────── */}
+      <View style={styles.meta}>
         <Text style={styles.time}>{time}</Text>
-        {entry.isProcessing && (
-          <ActivityIndicator size="small" color={colors.accentGreen} />
-        )}
-        {entry.parsedResult && (
-          <Text style={styles.calories}>
-            🔥 {Math.round(entry.parsedResult.totals.calories)}
-          </Text>
-        )}
+        <View style={styles.metaRight}>
+          {entry.isProcessing ? (
+            <Text style={styles.processing}>analisando</Text>
+          ) : entry.parsedResult ? (
+            <Text style={styles.kcal}>
+              {Math.round(entry.parsedResult.totals.calories)} kcal
+            </Text>
+          ) : null}
+        </View>
       </View>
 
-      {entry.rawText ? (
-        <Text style={styles.rawText}>{entry.rawText}</Text>
-      ) : null}
+      {/* ── Body text ─────────────────────────────────────────────────── */}
+      {showText && (
+        <Text style={styles.body}>{entry.rawText}</Text>
+      )}
 
-      {imageAsset?.uri ? (
+      {/* ── Photo ─────────────────────────────────────────────────────── */}
+      {imageAsset?.uri && (
         <View style={styles.imageBlock}>
           <Image
             source={{ uri: imageAsset.uri }}
             style={styles.image}
             contentFit="cover"
-            transition={100}
+            transition={200}
           />
           {imageCaption ? (
             <Text style={styles.imageCaption} numberOfLines={1}>
@@ -116,81 +80,106 @@ export function MealEntryCard({ entry }) {
             </Text>
           ) : null}
         </View>
-      ) : null}
+      )}
 
-      {entry.parsedResult && entry.parsedResult.items.length > 0 && (
-        <View style={styles.itemsContainer}>
+      {/* ── Parsed items breakdown ────────────────────────────────────── */}
+      {hasBreakdown && (
+        <View style={styles.breakdown}>
           {entry.parsedResult.items.map((item, i) => (
-            <View key={`${item.name}-${i}`} style={styles.itemRow}>
-              <Text style={styles.itemName}>{item.name}</Text>
-              <Text style={styles.itemCal}>{item.calories} kcal</Text>
-            </View>
+            <Text key={`${item.name}-${i}`} style={styles.breakdownItem}>
+              {item.name}
+              <Text style={styles.breakdownDot}> · </Text>
+              <Text style={styles.breakdownCal}>{item.calories} kcal</Text>
+            </Text>
           ))}
         </View>
       )}
-    </GlassView>
+    </View>
   );
 }
 
 const styles = StyleSheet.create({
-  card: {
-    borderRadius: radius.lg,
-    padding: spacing.lg,
-    marginBottom: spacing.sm,
-    borderWidth: StyleSheet.hairlineWidth,
-    borderColor: colors.glassBorder,
+  /* Inline entry — no card, no border-box, just content */
+  entry: {
+    paddingTop: spacing.lg,
+    paddingBottom: spacing.lg,
+    borderBottomWidth: StyleSheet.hairlineWidth,
+    borderBottomColor: "rgba(255,255,255,0.06)",
   },
-  header: {
+
+  /* Meta row */
+  meta: {
     flexDirection: "row",
-    justifyContent: "space-between",
     alignItems: "center",
-    marginBottom: spacing.sm,
+    justifyContent: "space-between",
+    marginBottom: spacing.xs + 2,
   },
   time: {
-    ...typography.caption1,
+    fontSize: 12,
+    fontWeight: "500",
     color: colors.systemGray2,
+    letterSpacing: 0.3,
   },
-  calories: {
-    fontSize: 14,
-    fontWeight: "700",
-    color: colors.textPrimary,
+  metaRight: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: spacing.sm,
   },
-  rawText: {
+  processing: {
+    fontSize: 12,
+    color: colors.systemGray3,
+    fontStyle: "italic",
+    letterSpacing: 0.5,
+  },
+  kcal: {
+    fontSize: 13,
+    fontWeight: "600",
+    color: colors.systemGray,
+    letterSpacing: -0.1,
+  },
+
+  /* Body text — notebook style, large and natural */
+  body: {
     ...typography.body,
-    color: "rgba(255,255,255,0.9)",
-    lineHeight: 24,
+    color: "rgba(255,255,255,0.92)",
+    lineHeight: 26,
+    letterSpacing: -0.3,
   },
+
+  /* Photo block — borderless, full-width */
   imageBlock: {
     marginTop: spacing.sm,
   },
   image: {
     width: "100%",
-    height: 200,
-    borderRadius: radius.md,
+    height: 220,
+    borderRadius: radius.lg,
+    backgroundColor: colors.bgTertiary,
   },
   imageCaption: {
-    ...typography.caption1,
+    fontSize: 12,
     color: colors.systemGray2,
     marginTop: spacing.xs,
+    letterSpacing: -0.1,
   },
-  itemsContainer: {
+
+  /* Parsed items — subtle indented breakdown */
+  breakdown: {
     marginTop: spacing.sm,
-    paddingTop: spacing.sm,
-    borderTopWidth: StyleSheet.hairlineWidth,
-    borderTopColor: "rgba(255,255,255,0.08)",
-    gap: spacing.xs,
+    gap: 3,
+    paddingLeft: 2,
   },
-  itemRow: {
-    flexDirection: "row",
-    justifyContent: "space-between",
-    alignItems: "center",
-  },
-  itemName: {
-    ...typography.footnote,
-    color: colors.systemGray,
-  },
-  itemCal: {
-    ...typography.caption1,
+  breakdownItem: {
+    fontSize: 13,
     color: colors.systemGray2,
+    lineHeight: 19,
+    letterSpacing: -0.1,
+  },
+  breakdownDot: {
+    color: colors.systemGray3,
+  },
+  breakdownCal: {
+    color: colors.systemGray3,
+    fontWeight: "400",
   },
 });

@@ -7,7 +7,7 @@
  *   Bottom nutrition bar tap → expands goals panel with smooth animation.
  */
 import React, {
-  useState, useRef, useCallback, useMemo, useEffect, useContext,
+  useState, useRef, useCallback, useMemo, useEffect,
 } from "react";
 import {
   View, Text, TextInput, TouchableOpacity, ScrollView,
@@ -31,7 +31,7 @@ import { useSpeechRecognition } from "../hooks/useSpeechRecognition";
 import { MealEntryCard } from "../components/journal/MealEntryCard";
 import { ActionBar } from "../components/journal/ActionBar";
 import { GoalsPanel } from "../components/journal/GoalsPanel";
-import { colors, darkColors, useThemeColors, spacing, radius, typography } from "../theme";
+import { colors, darkColors, lightColors, spacing, radius, typography } from "../theme";
 
 const WEB_TOP_INSET = Platform.OS === "web" ? 16 : 0;
 const WEB_BOTTOM_INSET = Platform.OS === "web" ? 34 : 0;
@@ -68,10 +68,6 @@ function formatMonthYear(dateStr) {
 const glass = (fallback) =>
   isLiquidGlassAvailable() ? {} : { backgroundColor: fallback };
 
-/* ── theme context (settings sub-components share reactive colors) ─────────── */
-
-const ThemeContext = React.createContext(darkColors);
-
 /* ── settings sub-components ─────────────────────────────────────────────── */
 
 // iOS-style rounded-square icon badge with SF Symbol support
@@ -93,16 +89,15 @@ function IconBadge({ color, icon, sfName }) {
 }
 
 function NavRow({ badge, badgeColor, sfName, label, sublabel, value, onPress, isLast }) {
-  const C = useContext(ThemeContext);
   const content = (
-    <View style={[sS.row, isLast && sS.rowLast, { borderBottomColor: C.separator }]}>
+    <View style={[sS.row, isLast && sS.rowLast]}>
       {badge ? <IconBadge color={badgeColor} icon={badge} sfName={sfName} /> : null}
       <View style={sS.rowBody}>
-        <Text style={[sS.rowLabel, { color: C.textPrimary }]}>{label}</Text>
-        {sublabel ? <Text style={[sS.rowSub, { color: C.textSecondary }]}>{sublabel}</Text> : null}
+        <Text style={sS.rowLabel}>{label}</Text>
+        {sublabel ? <Text style={sS.rowSub}>{sublabel}</Text> : null}
       </View>
-      {value ? <Text style={[sS.rowVal, { color: C.textSecondary }]}>{value}</Text> : null}
-      {onPress ? <Text style={[sS.chevron, { color: C.systemGray3 }]}>›</Text> : null}
+      {value ? <Text style={sS.rowVal}>{value}</Text> : null}
+      {onPress ? <Text style={sS.chevron}>›</Text> : null}
     </View>
   );
   return onPress ? (
@@ -111,13 +106,12 @@ function NavRow({ badge, badgeColor, sfName, label, sublabel, value, onPress, is
 }
 
 function ToggleRow({ badge, badgeColor, sfName, label, sublabel, value, onToggle, isLast }) {
-  const C = useContext(ThemeContext);
   return (
-    <View style={[sS.row, isLast && sS.rowLast, { borderBottomColor: C.separator }]}>
+    <View style={[sS.row, isLast && sS.rowLast]}>
       {badge ? <IconBadge color={badgeColor} icon={badge} sfName={sfName} /> : null}
       <View style={sS.rowBody}>
-        <Text style={[sS.rowLabel, { color: C.textPrimary }]}>{label}</Text>
-        {sublabel ? <Text style={[sS.rowSub, { color: C.textSecondary }]}>{sublabel}</Text> : null}
+        <Text style={sS.rowLabel}>{label}</Text>
+        {sublabel ? <Text style={sS.rowSub}>{sublabel}</Text> : null}
       </View>
       <TouchableOpacity onPress={onToggle} activeOpacity={0.8}>
         <GlassView
@@ -125,7 +119,7 @@ function ToggleRow({ badge, badgeColor, sfName, label, sublabel, value, onToggle
           style={[
             sS.toggle,
             !isLiquidGlassAvailable() && { backgroundColor: "rgba(120,120,128,0.32)" },
-            value && { backgroundColor: C.accentGreen },
+            value && sS.toggleOn,
           ]}
         >
           <View style={[sS.thumb, value && sS.thumbOn]} />
@@ -135,20 +129,19 @@ function ToggleRow({ badge, badgeColor, sfName, label, sublabel, value, onToggle
   );
 }
 
-// Dark / Light mode segmented row
+// Dark / Light mode segmented row — colorMode passed as prop from Index
 function AppearanceRow({ colorMode, onToggle }) {
-  const C = useContext(ThemeContext);
   const isDark = colorMode === "dark";
   return (
-    <View style={[sS.row, { borderBottomColor: C.separator }]}>
+    <View style={sS.row}>
       <IconBadge
         color={isDark ? "#5e5ce6" : "#f59e0b"}
         icon={isDark ? "🌙" : "☀️"}
         sfName={isDark ? "moon.fill" : "sun.max.fill"}
       />
       <View style={sS.rowBody}>
-        <Text style={[sS.rowLabel, { color: C.textPrimary }]}>Appearance</Text>
-        <Text style={[sS.rowSub, { color: C.textSecondary }]}>{isDark ? "Dark" : "Light"}</Text>
+        <Text style={sS.rowLabel}>Appearance</Text>
+        <Text style={sS.rowSub}>{isDark ? "Dark" : "Light"}</Text>
       </View>
       <View style={sS.segmentedControl}>
         <TouchableOpacity
@@ -171,11 +164,10 @@ function AppearanceRow({ colorMode, onToggle }) {
 }
 
 function Card({ children }) {
-  const C = useContext(ThemeContext);
   return (
     <GlassView
       isInteractive={false}
-      style={[sS.card, isLiquidGlassAvailable() ? {} : { backgroundColor: C.glassBg }]}
+      style={[sS.card, glass("rgba(255,255,255,0.07)")]}
     >
       {children}
     </GlassView>
@@ -183,8 +175,7 @@ function Card({ children }) {
 }
 
 function SectionTitle({ title }) {
-  const C = useContext(ThemeContext);
-  return <Text style={[sS.sectionTitle, { color: C.systemGray2 }]}>{title}</Text>;
+  return <Text style={sS.sectionTitle}>{title}</Text>;
 }
 
 /* ── main screen ─────────────────────────────────────────────────────────── */
@@ -211,10 +202,16 @@ export default function Index() {
     clearTranscript,
   } = useSpeechRecognition();
 
-  /* theme ------------------------------------------------------------------ */
-  const C = useThemeColors();
+  /* theme — computed from colorMode state (no useColorScheme hook needed) -- */
   const [colorMode, setColorMode] = useState("dark");
-  useEffect(() => { Appearance.setColorScheme(colorMode); }, [colorMode]);
+  const C = colorMode === "dark" ? darkColors : lightColors;
+  useEffect(() => {
+    try {
+      if (typeof Appearance.setColorScheme === "function") {
+        Appearance.setColorScheme(colorMode);
+      }
+    } catch (_) { /* web may not support setColorScheme */ }
+  }, [colorMode]);
   const handleToggleAppearance = useCallback(
     (mode) => setColorMode(mode),
     [],
@@ -336,7 +333,7 @@ export default function Index() {
     setTimeout(() => inputRef.current?.focus(), 50);
   }, []);
 
-  // Submit on Enter — no explicit Save button needed
+  // Submit on Enter — keep keyboard open for continuous notebook logging
   const handleSubmit = useCallback(async () => {
     if (isListening) {
       stopListening();
@@ -344,6 +341,7 @@ export default function Index() {
 
     const raw = text.trim();
     if (!raw) {
+      // Empty submit = dismiss keyboard
       Keyboard.dismiss();
       setIsEditing(false);
       return;
@@ -353,8 +351,8 @@ export default function Index() {
     setText("");
     clearTranscript();
     dictationBaseTextRef.current = "";
-    Keyboard.dismiss();
-    setIsEditing(false);
+    // Stay in editing mode — notebook cursor stays at the bottom
+    // The user can dismiss with the keyboard button when done
     setTimeout(() => scrollRef.current?.scrollToEnd({ animated: true }), 100);
   }, [text, addTextEntry, clearTranscript, isListening, stopListening]);
 
@@ -668,53 +666,62 @@ export default function Index() {
                   </View>
                 )}
 
-                {/* Text input — active page only */}
+                {/* Speech error — active page only */}
                 {isActive && speechError ? (
                   <Text style={styles.errorText}>{speechError}</Text>
                 ) : null}
 
-                {isActive && isEditing ? (
-                  <TextInput
-                    ref={inputRef}
-                    value={text}
-                    onChangeText={setText}
-                    placeholder="O que você comeu?..."
-                    placeholderTextColor={colors.systemGray3}
-                    style={styles.inlineInput}
-                    multiline
-                    autoFocus
-                    returnKeyType="send"
-                    submitBehavior="submit"
-                    enablesReturnKeyAutomatically
-                    onSubmitEditing={() => {
-                      void handleSubmit();
-                    }}
-                    blurOnSubmit={false}
-                  />
-                ) : dayEntries.length === 0 ? (
-                  <TouchableOpacity
-                    onPress={isActive ? handleStartEditing : undefined}
-                    activeOpacity={isActive ? 0.5 : 1}
-                  >
-                    <Text style={styles.placeholder}>
-                      {isActive ? "Start logging your meals..." : "No entries for this day."}
-                    </Text>
-                  </TouchableOpacity>
-                ) : (
-                  <>
-                    {dayEntries.map((entry) => (
-                      <MealEntryCard key={entry.id} entry={entry} />
-                    ))}
-                    {isActive && (
-                      <TouchableOpacity
-                        onPress={handleStartEditing}
-                        style={styles.addMoreBtn}
-                        activeOpacity={0.5}
+                {/* ── Entries always rendered (notebook page) ──────────── */}
+                {dayEntries.map((entry) => (
+                  <MealEntryCard key={entry.id} entry={entry} />
+                ))}
+
+                {/* Inactive day empty state */}
+                {!isActive && dayEntries.length === 0 && (
+                  <Text style={styles.placeholder}>Sem registros neste dia.</Text>
+                )}
+
+                {/* ── Input or tap-to-write prompt — active day only ───── */}
+                {isActive && (
+                  isEditing ? (
+                    <TextInput
+                      ref={inputRef}
+                      value={text}
+                      onChangeText={setText}
+                      placeholder={
+                        dayEntries.length === 0
+                          ? "O que você comeu?..."
+                          : "Continuar a anotar..."
+                      }
+                      placeholderTextColor={colors.systemGray3}
+                      style={styles.inlineInput}
+                      multiline
+                      autoFocus
+                      returnKeyType="send"
+                      submitBehavior="submit"
+                      enablesReturnKeyAutomatically
+                      onSubmitEditing={() => void handleSubmit()}
+                      blurOnSubmit={false}
+                    />
+                  ) : (
+                    <TouchableOpacity
+                      onPress={handleStartEditing}
+                      style={styles.writingPromptArea}
+                      activeOpacity={0.5}
+                    >
+                      <Text
+                        style={
+                          dayEntries.length === 0
+                            ? styles.placeholder
+                            : styles.continuePrompt
+                        }
                       >
-                        <Text style={styles.addMoreText}>+ Adicionar refeição</Text>
-                      </TouchableOpacity>
-                    )}
-                  </>
+                        {dayEntries.length === 0
+                          ? "O que você comeu?..."
+                          : "Continuar a anotar..."}
+                      </Text>
+                    </TouchableOpacity>
+                  )
                 )}
               </ScrollView>
             );
@@ -892,18 +899,17 @@ export default function Index() {
         index={-1}
         snapPoints={["90%"]}
         enablePanDownToClose
-        backgroundStyle={[styles.sheetBg, { backgroundColor: C.bgSecondary }]}
-        handleIndicatorStyle={[styles.sheetHandle, { backgroundColor: C.systemGray3 }]}
+        backgroundStyle={styles.sheetBg}
+        handleIndicatorStyle={styles.sheetHandle}
       >
-        <ThemeContext.Provider value={C}>
           <BottomSheetScrollView
             contentContainerStyle={[styles.settingsContent, { paddingBottom: insets.bottom + 40 }]}
           >
             {/* Header */}
             <View style={sS.header}>
-              <Text style={[sS.title, { color: C.textPrimary }]}>Settings</Text>
-              <TouchableOpacity onPress={closeSettings} activeOpacity={0.7} style={[sS.closeBtn, { backgroundColor: C.glassBg }]}>
-                <Text style={[sS.closeBtnText, { color: C.textSecondary }]}>✕</Text>
+              <Text style={sS.title}>Settings</Text>
+              <TouchableOpacity onPress={closeSettings} activeOpacity={0.7} style={sS.closeBtn}>
+                <Text style={sS.closeBtnText}>✕</Text>
               </TouchableOpacity>
             </View>
 
@@ -1019,7 +1025,6 @@ export default function Index() {
               <NavRow badge="🚪" badgeColor="#ef4444" sfName="rectangle.portrait.and.arrow.right.fill" label="Sign Out" onPress={() => {}} isLast />
             </Card>
           </BottomSheetScrollView>
-        </ThemeContext.Provider>
       </BottomSheet>
 
       <Modal
@@ -1208,31 +1213,46 @@ const styles = StyleSheet.create({
   gearIcon:   { fontSize: 15, color: colors.textSecondary },
   gearSymbol: { width: 16, height: 16 },
 
-  /* Scroll */
+  /* Scroll — extra paddingBottom clears the absolute bottom bar */
   scrollContent: {
     paddingHorizontal: spacing.xl,
-    paddingTop: spacing.sm,
-    paddingBottom: spacing.md,
+    paddingTop: spacing.lg,
+    paddingBottom: 200,
     flexGrow: 1,
   },
 
-  /* Inline input — no buttons, note-like */
+  /* Inline input — transparent, note-like, sits below entries */
   inlineInput: {
     ...typography.body,
     color: "rgba(255,255,255,0.90)",
-    minHeight: 60,
+    minHeight: 48,
     textAlignVertical: "top",
-    paddingTop: spacing.xs,
+    paddingTop: spacing.lg,
+    letterSpacing: -0.3,
+    lineHeight: 26,
   },
 
-  /* Placeholder — subtle notebook prompt */
+  /* Placeholder — subtle notebook opening prompt */
   placeholder: {
     ...typography.body,
     color: colors.systemGray3,
     paddingTop: spacing.xs,
+    lineHeight: 26,
+    letterSpacing: -0.3,
   },
-  addMoreBtn: { paddingVertical: spacing.md, alignItems: "center" },
-  addMoreText: { ...typography.callout, color: colors.systemGray },
+
+  /* Writing prompt shown below entries when keyboard is closed */
+  writingPromptArea: {
+    paddingTop: spacing.lg,
+    paddingBottom: spacing.xl,
+    minHeight: 64,
+  },
+  continuePrompt: {
+    fontSize: 15,
+    color: colors.systemGray4,
+    letterSpacing: -0.2,
+    fontStyle: "italic",
+  },
 
   /* Listening indicator */
   listeningBadge: {
@@ -1488,12 +1508,13 @@ const sS = StyleSheet.create({
     paddingTop: spacing.md,
     paddingBottom: spacing.xl,
   },
-  title: { fontSize: 22, fontWeight: "700", letterSpacing: 0.35 },
+  title: { fontSize: 22, fontWeight: "700", letterSpacing: 0.35, color: "#f5f5f5" },
   closeBtn: {
     width: 30, height: 30, borderRadius: 15,
     alignItems: "center", justifyContent: "center",
+    backgroundColor: "rgba(255,255,255,0.08)",
   },
-  closeBtnText: { fontSize: 14, fontWeight: "500", lineHeight: 18 },
+  closeBtnText: { fontSize: 14, fontWeight: "500", lineHeight: 18, color: "#8e8e93" },
 
   /* Section label */
   sectionTitle: {
@@ -1504,6 +1525,7 @@ const sS = StyleSheet.create({
     marginBottom: spacing.sm,
     marginTop: spacing.xl + 4,
     paddingHorizontal: spacing.sm,
+    color: "#636366",
   },
 
   /* Card container */
@@ -1517,14 +1539,15 @@ const sS = StyleSheet.create({
     paddingVertical: 14,
     minHeight: 56,
     borderBottomWidth: StyleSheet.hairlineWidth,
+    borderBottomColor: "rgba(255,255,255,0.08)",
     gap: spacing.md,
   },
   rowLast: { borderBottomWidth: 0 },
   rowBody: { flex: 1 },
-  rowLabel: { fontSize: 16, fontWeight: "400", letterSpacing: -0.2 },
-  rowSub: { fontSize: 12, marginTop: 2, letterSpacing: -0.1 },
-  rowVal:  { fontSize: 14 },
-  chevron: { fontSize: 20, lineHeight: 24 },
+  rowLabel: { fontSize: 16, fontWeight: "400", letterSpacing: -0.2, color: "#f5f5f5" },
+  rowSub: { fontSize: 12, marginTop: 2, letterSpacing: -0.1, color: "#8e8e93" },
+  rowVal:  { fontSize: 14, color: "#8e8e93" },
+  chevron: { fontSize: 20, lineHeight: 24, color: "#48484a" },
 
   /* iOS-style icon badge — colored rounded square */
   iconBadge: {
@@ -1555,6 +1578,7 @@ const sS = StyleSheet.create({
     elevation: 4,
   },
   thumbOn: { transform: [{ translateX: 20 }] },
+  toggleOn: { backgroundColor: colors.accentGreen },
 
   /* Appearance segmented control */
   segmentedControl: {

@@ -1,0 +1,260 @@
+I am building an iPhone-first nutrition app that should behave like a premium daily food notebook, not like a chat app and not like a dashboard.
+
+Your job is to refine and adjust the existing app based on the product behavior below, keeping the current architecture whenever possible and improving the UX, state management and component behavior.
+
+MAIN PRODUCT IDEA
+
+This app is a daily nutrition journal.
+Each day is its own notebook page.
+The user should feel like they are writing food entries inside a daily note.
+
+This is not a chat interface.
+This is not a form-based logging tool.
+This is not a card-heavy dashboard.
+
+The experience should feel minimal, elegant, fluid and iPhone-native.
+
+CORE STRUCTURE
+
+The app has:
+1. A home journal screen for the selected day
+2. A date pill at the top
+3. A top-right calories/settings pill
+4. A writing area where food is logged
+5. A floating keyboard accessory row when typing
+6. A compact bottom nutrition summary
+7. An expanded nutrition detail panel
+8. A calendar picker
+9. A settings screen
+
+DAILY PAGE MODEL
+
+Treat each day as an independent notebook page.
+
+Each day must store and render its own:
+- written food entries
+- photo-based food entries
+- interpreted food results
+- daily calories
+- daily macros
+- expanded nutrition metrics
+- empty state if nothing was logged
+
+If the user goes to another day and comes back, that day's content must still be there.
+
+There must be one selectedDay source of truth.
+
+FOOD LOGGING, MOST IMPORTANT PART
+
+Food logging must feel like writing naturally into a note.
+
+Correct behavior:
+- the user taps into the journal area
+- the user starts typing normally
+- the text appears inline inside the daily notebook page
+- the text should look like written note content, not a sent chat message
+- pressing Enter should continue the note flow, not create a message bubble, card or boxed block
+
+Important:
+Food entries must remain visually like normal written content in the page.
+
+Wrong behavior:
+- do not turn entries into chat bubbles
+- do not wrap entries in square cards
+- do not use message blocks
+- do not create a send-message style interface
+
+Correct behavior after typing:
+- the written food text remains in the notebook
+- the app can later interpret it
+- the interpretation should update the nutrition summary for that specific day
+
+FUTURE AI INTERPRETATION FLOW
+
+AI is not fully integrated yet, but the UI must already support this behavior:
+
+Expected future flow:
+- user types something like “pão de queijo”
+- the entry stays inline on the page
+- the system starts interpreting the content
+- subtle UI states may appear, such as “Searching” and “Thinking”
+- these states should be lightweight, elegant and embedded into the notebook flow
+- once interpretation finishes, calories and macros update the selected day
+
+Important:
+Even with AI interpretation, the app must still feel like a notebook, not a chatbot.
+
+PHOTO AND CAMERA FLOW
+
+The camera/photo feature must be part of the same notebook flow.
+
+When the camera button is tapped:
+- open a native iOS-style contextual menu
+- this menu should include:
+  - Scan Menu
+  - Choose from Library
+  - Take Photo
+
+This menu should feel like a native iPhone contextual menu with dark premium styling.
+
+After the user chooses an option:
+- the resulting image or scan must attach to the selected day
+- it must feed into the same food logging flow
+- it must appear integrated into the writing/notebook area
+- it must not open a disconnected experience
+- it must not break layout or state
+
+If AI later analyzes the image, that analysis must also stay inside the notebook flow for that day.
+
+DAY NAVIGATION
+
+The app must support real day-to-day navigation.
+
+Required behavior:
+- swipe left goes to next day
+- swipe right goes to previous day
+- tapping the date pill opens the calendar
+- calendar selection changes the selected day
+- all day navigation methods must update the same selectedDay state
+
+When the day changes, update together:
+- date pill label
+- notebook content
+- empty state or filled state
+- bottom nutrition summary
+- expanded nutrition detail panel
+
+The user should feel like they are swiping between daily notebook pages.
+
+BOTTOM NUTRITION SUMMARY
+
+At the bottom of the home screen there is a compact floating nutrition summary for the selected day.
+
+Collapsed state:
+- compact capsule
+- shows calories and key macros for the current day
+- elegant and subtle
+- tied only to the selected day
+
+Expanded state:
+- opens upward from the compact summary
+- feels like the expanded state of the same component
+- shows:
+  - calories progress
+  - burned
+  - carbs
+  - protein
+  - fat
+  - sugar
+  - fiber
+  - sodium
+
+Important:
+This should not feel like a static dashboard card.
+It should feel like a day-specific nutrition sheet connected to the bottom summary.
+
+KEYBOARD ACCESSORY ROW
+
+When typing, show a floating accessory row above the keyboard.
+
+This row includes:
+- a left calorie chip
+- microphone button
+- camera button
+- add button
+- another utility button if needed
+
+Behavior:
+- it should only appear when relevant
+- it should disappear correctly when the keyboard is dismissed
+- it must not remain orphaned on screen
+- it should feel like a premium floating tool palette
+
+SETTINGS SCREEN
+
+The settings screen should keep its grouped iOS-style structure.
+
+Main sections can include:
+- account info
+- goals & targets
+- health profile
+- weight tracking
+- saved meals
+- preferences
+- Apple Health
+- device settings
+- subscription
+
+Settings behavior:
+- keep grouped rows
+- keep clean iOS-like hierarchy
+- keep toggles working
+- keep the design minimal and premium
+
+Important visual detail:
+- settings icons should not have heavy boxed backgrounds
+- use cleaner, lighter icon presentation
+- toggles should feel premium and integrated with the app’s visual system
+
+VISUAL DIRECTION
+
+The visual style should be:
+- iPhone-first
+- dark graphite, not pure black
+- premium
+- minimal
+- airy
+- calm
+- elegant
+
+Floating elements should use a dark liquid-glass style:
+- date pill
+- top-right pill
+- keyboard accessory controls
+- calorie chip
+- bottom summary
+- contextual camera menu where appropriate
+
+The app should feel like:
+- a premium personal notebook
+- not a dashboard
+- not a chat tool
+- not a generic calorie tracker
+
+IMPORTANT BUGS / EDGE CASES TO HANDLE
+
+Please review and fix current or potential issues such as:
+- horizontal swipe between days not updating real page state
+- typed content being rendered as boxed messages
+- keyboard accessory row remaining visible after keyboard dismissal
+- camera/photo result not entering the notebook flow correctly
+- content being attached to the wrong day
+- keyboard state conflicting with day navigation
+- abrupt transitions when keyboard opens/closes
+- nutrition summary not staying synchronized with selected day
+
+TECHNICAL IMPLEMENTATION DIRECTION
+
+Please structure the app around:
+- a selectedDay state
+- per-day stored data keyed by date
+- notebook-like rendering for each day
+- one shared source of truth for day navigation
+- input flow that keeps text inline on the page
+- future AI interpretation states that can be attached to each entry/day
+- clean synchronization between text input, image input, keyboard state, and selected day
+
+MAIN UX GOAL
+
+Final user experience should be:
+- user opens app and sees today’s notebook page
+- user writes food naturally into that day
+- entries stay inline like a note
+- AI can later interpret them without turning the UI into a chat
+- user can swipe between days like turning notebook pages
+- each day keeps its own content
+- the nutrition summary always reflects the selected day
+- camera and library actions feed into the same notebook flow
+- the app feels premium, calm and iPhone-native
+
+Please adjust the current implementation around this product behavior instead of rebuilding everything from scratch.

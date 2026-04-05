@@ -116,7 +116,7 @@ export function useJournalStore() {
         id: `${Date.now()}-${Math.random().toString(36).slice(2)}`,
         date: selectedDate,
         createdAt: new Date().toISOString(),
-        rawText: "Imagem adicionada ao chat para analise futura.",
+        rawText: "",
         imageUri: imageAsset.uri,
         imageAsset,
         image: imageAsset,
