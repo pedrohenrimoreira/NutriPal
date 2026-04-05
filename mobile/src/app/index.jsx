@@ -7,12 +7,12 @@
  *   Bottom nutrition bar tap → expands goals panel with smooth animation.
  */
 import React, {
-  useState, useRef, useCallback, useMemo, useEffect,
+  useState, useRef, useCallback, useMemo, useEffect, useContext,
 } from "react";
 import {
   View, Text, TextInput, TouchableOpacity, ScrollView,
   KeyboardAvoidingView, Platform, StyleSheet, Keyboard, LayoutAnimation,
-  useWindowDimensions, Modal, Alert,
+  useWindowDimensions, Modal, Alert, Appearance,
 } from "react-native";
 
 import * as ImagePicker from "expo-image-picker";
@@ -31,7 +31,7 @@ import { useSpeechRecognition } from "../hooks/useSpeechRecognition";
 import { MealEntryCard } from "../components/journal/MealEntryCard";
 import { ActionBar } from "../components/journal/ActionBar";
 import { GoalsPanel } from "../components/journal/GoalsPanel";
-import { colors, spacing, radius, typography } from "../theme";
+import { colors, darkColors, useThemeColors, spacing, radius, typography } from "../theme";
 
 const WEB_TOP_INSET = Platform.OS === "web" ? 16 : 0;
 const WEB_BOTTOM_INSET = Platform.OS === "web" ? 34 : 0;
@@ -68,26 +68,41 @@ function formatMonthYear(dateStr) {
 const glass = (fallback) =>
   isLiquidGlassAvailable() ? {} : { backgroundColor: fallback };
 
+/* ── theme context (settings sub-components share reactive colors) ─────────── */
+
+const ThemeContext = React.createContext(darkColors);
+
 /* ── settings sub-components ─────────────────────────────────────────────── */
 
-function IconBadge({ color, icon }) {
-  // No container — just the glyph with fixed width for row alignment.
-  // Emoji colors are intrinsic; color prop used for text-only glyphs.
+// iOS-style rounded-square icon badge with SF Symbol support
+function IconBadge({ color, icon, sfName }) {
   return (
-    <Text style={[sS.badgeIcon, { color }]}>{icon}</Text>
+    <View style={[sS.iconBadge, { backgroundColor: color }]}>
+      {Platform.OS === "ios" && sfName ? (
+        <SymbolView
+          name={sfName}
+          style={sS.symbol}
+          type="hierarchical"
+          tintColor="#ffffff"
+        />
+      ) : (
+        <Text style={sS.badgeIcon}>{icon}</Text>
+      )}
+    </View>
   );
 }
 
-function NavRow({ badge, badgeColor, label, sublabel, value, onPress, isLast }) {
+function NavRow({ badge, badgeColor, sfName, label, sublabel, value, onPress, isLast }) {
+  const C = useContext(ThemeContext);
   const content = (
-    <View style={[sS.row, isLast && sS.rowLast]}>
-      {badge ? <IconBadge color={badgeColor} icon={badge} /> : null}
+    <View style={[sS.row, isLast && sS.rowLast, { borderBottomColor: C.separator }]}>
+      {badge ? <IconBadge color={badgeColor} icon={badge} sfName={sfName} /> : null}
       <View style={sS.rowBody}>
-        <Text style={sS.rowLabel}>{label}</Text>
-        {sublabel ? <Text style={sS.rowSub}>{sublabel}</Text> : null}
+        <Text style={[sS.rowLabel, { color: C.textPrimary }]}>{label}</Text>
+        {sublabel ? <Text style={[sS.rowSub, { color: C.textSecondary }]}>{sublabel}</Text> : null}
       </View>
-      {value ? <Text style={sS.rowVal}>{value}</Text> : null}
-      {onPress ? <Text style={sS.chevron}>›</Text> : null}
+      {value ? <Text style={[sS.rowVal, { color: C.textSecondary }]}>{value}</Text> : null}
+      {onPress ? <Text style={[sS.chevron, { color: C.systemGray3 }]}>›</Text> : null}
     </View>
   );
   return onPress ? (
@@ -95,28 +110,72 @@ function NavRow({ badge, badgeColor, label, sublabel, value, onPress, isLast }) 
   ) : content;
 }
 
-function ToggleRow({ badge, badgeColor, label, value, onToggle, isLast }) {
+function ToggleRow({ badge, badgeColor, sfName, label, sublabel, value, onToggle, isLast }) {
+  const C = useContext(ThemeContext);
   return (
-    <View style={[sS.row, isLast && sS.rowLast]}>
-      {badge ? <IconBadge color={badgeColor} icon={badge} /> : null}
+    <View style={[sS.row, isLast && sS.rowLast, { borderBottomColor: C.separator }]}>
+      {badge ? <IconBadge color={badgeColor} icon={badge} sfName={sfName} /> : null}
       <View style={sS.rowBody}>
-        <Text style={sS.rowLabel}>{label}</Text>
+        <Text style={[sS.rowLabel, { color: C.textPrimary }]}>{label}</Text>
+        {sublabel ? <Text style={[sS.rowSub, { color: C.textSecondary }]}>{sublabel}</Text> : null}
       </View>
-      <TouchableOpacity
-        onPress={onToggle} activeOpacity={0.8}
-        style={[sS.toggle, value && sS.toggleOn]}
-      >
-        <View style={[sS.thumb, value && sS.thumbOn]} />
+      <TouchableOpacity onPress={onToggle} activeOpacity={0.8}>
+        <GlassView
+          isInteractive={false}
+          style={[
+            sS.toggle,
+            !isLiquidGlassAvailable() && { backgroundColor: "rgba(120,120,128,0.32)" },
+            value && { backgroundColor: C.accentGreen },
+          ]}
+        >
+          <View style={[sS.thumb, value && sS.thumbOn]} />
+        </GlassView>
       </TouchableOpacity>
     </View>
   );
 }
 
+// Dark / Light mode segmented row
+function AppearanceRow({ colorMode, onToggle }) {
+  const C = useContext(ThemeContext);
+  const isDark = colorMode === "dark";
+  return (
+    <View style={[sS.row, { borderBottomColor: C.separator }]}>
+      <IconBadge
+        color={isDark ? "#5e5ce6" : "#f59e0b"}
+        icon={isDark ? "🌙" : "☀️"}
+        sfName={isDark ? "moon.fill" : "sun.max.fill"}
+      />
+      <View style={sS.rowBody}>
+        <Text style={[sS.rowLabel, { color: C.textPrimary }]}>Appearance</Text>
+        <Text style={[sS.rowSub, { color: C.textSecondary }]}>{isDark ? "Dark" : "Light"}</Text>
+      </View>
+      <View style={sS.segmentedControl}>
+        <TouchableOpacity
+          style={[sS.segBtn, !isDark && sS.segBtnActive]}
+          onPress={() => onToggle("light")}
+          activeOpacity={0.75}
+        >
+          <Text style={[sS.segLabel, !isDark && sS.segLabelActive]}>Light</Text>
+        </TouchableOpacity>
+        <TouchableOpacity
+          style={[sS.segBtn, isDark && sS.segBtnActive]}
+          onPress={() => onToggle("dark")}
+          activeOpacity={0.75}
+        >
+          <Text style={[sS.segLabel, isDark && sS.segLabelActive]}>Dark</Text>
+        </TouchableOpacity>
+      </View>
+    </View>
+  );
+}
+
 function Card({ children }) {
+  const C = useContext(ThemeContext);
   return (
     <GlassView
       isInteractive={false}
-      style={[sS.card, glass("rgba(255,255,255,0.07)")]}
+      style={[sS.card, isLiquidGlassAvailable() ? {} : { backgroundColor: C.glassBg }]}
     >
       {children}
     </GlassView>
@@ -124,7 +183,8 @@ function Card({ children }) {
 }
 
 function SectionTitle({ title }) {
-  return <Text style={sS.sectionTitle}>{title}</Text>;
+  const C = useContext(ThemeContext);
+  return <Text style={[sS.sectionTitle, { color: C.systemGray2 }]}>{title}</Text>;
 }
 
 /* ── main screen ─────────────────────────────────────────────────────────── */
@@ -150,6 +210,15 @@ export default function Index() {
     stopListening,
     clearTranscript,
   } = useSpeechRecognition();
+
+  /* theme ------------------------------------------------------------------ */
+  const C = useThemeColors();
+  const [colorMode, setColorMode] = useState("dark");
+  useEffect(() => { Appearance.setColorScheme(colorMode); }, [colorMode]);
+  const handleToggleAppearance = useCallback(
+    (mode) => setColorMode(mode),
+    [],
+  );
 
   const [isEditing, setIsEditing] = useState(false);
   const [text, setText] = useState("");
@@ -519,8 +588,8 @@ export default function Index() {
 
   /* render ---------------------------------------------------------------- */
   return (
-    <View style={styles.root}>
-      <StatusBar style="light" />
+    <View style={[styles.root, { backgroundColor: C.bgPrimary }]}>
+      <StatusBar style={colorMode === "dark" ? "light" : "dark"} />
 
       {/* ── Header ──────────────────────────────────────────────────────── */}
       <View style={[styles.header, { paddingTop: insets.top + WEB_TOP_INSET + 10 }]}>
@@ -823,132 +892,134 @@ export default function Index() {
         index={-1}
         snapPoints={["90%"]}
         enablePanDownToClose
-        backgroundStyle={styles.sheetBg}
-        handleIndicatorStyle={styles.sheetHandle}
+        backgroundStyle={[styles.sheetBg, { backgroundColor: C.bgSecondary }]}
+        handleIndicatorStyle={[styles.sheetHandle, { backgroundColor: C.systemGray3 }]}
       >
-        <BottomSheetScrollView
-          contentContainerStyle={[styles.settingsContent, { paddingBottom: insets.bottom + 32 }]}
-        >
-          {/* Header */}
-          <View style={sS.header}>
-            <Text style={sS.title}>Settings</Text>
-            <TouchableOpacity onPress={closeSettings} activeOpacity={0.7} style={sS.closeBtn}>
-              <Text style={sS.closeBtnText}>✕</Text>
-            </TouchableOpacity>
-          </View>
+        <ThemeContext.Provider value={C}>
+          <BottomSheetScrollView
+            contentContainerStyle={[styles.settingsContent, { paddingBottom: insets.bottom + 40 }]}
+          >
+            {/* Header */}
+            <View style={sS.header}>
+              <Text style={[sS.title, { color: C.textPrimary }]}>Settings</Text>
+              <TouchableOpacity onPress={closeSettings} activeOpacity={0.7} style={[sS.closeBtn, { backgroundColor: C.glassBg }]}>
+                <Text style={[sS.closeBtnText, { color: C.textSecondary }]}>✕</Text>
+              </TouchableOpacity>
+            </View>
 
-          {/* Profile */}
-          <Card>
-            <NavRow label="Name"  value="Pedro Moreira" />
-            <NavRow label="Email" value="pedrohenriqmoreira@gmail.com" isLast />
-          </Card>
+            {/* Profile */}
+            <Card>
+              <NavRow label="Name"  value="Pedro Moreira" />
+              <NavRow label="Email" value="pedrohenriqmoreira@gmail.com" isLast />
+            </Card>
 
-          <SectionTitle title="Goals & Targets" />
-          <Card>
-            <NavRow
-              badge="⚖" badgeColor="#3b82f6"
-              label="61.5 kg"
-              sublabel="🔥 2,729 cal · P 136g · C 303g · F 91g"
-            />
-            <NavRow
-              badge="📊" badgeColor="#3b82f6"
-              label="Manage Nutrition Goals"
-              onPress={() => {}} isLast
-            />
-          </Card>
+            <SectionTitle title="Goals & Targets" />
+            <Card>
+              <NavRow
+                badge="⚖️" badgeColor="#3b82f6" sfName="scalemass.fill"
+                label="61.5 kg"
+                sublabel="🔥 2,729 cal · P 136g · C 303g · F 91g"
+              />
+              <NavRow
+                badge="📊" badgeColor="#3b82f6" sfName="chart.bar.fill"
+                label="Manage Nutrition Goals"
+                onPress={() => {}} isLast
+              />
+            </Card>
 
-          <SectionTitle title="Health Profile" />
-          <Card>
-            <NavRow
-              badge="❤" badgeColor="#ef4444"
-              label="61.5 kg (current weight)"
-              sublabel="Moderately Active"
-            />
-            <NavRow
-              badge="📋" badgeColor="#ef4444"
-              label="Manage Health Info"
-              onPress={() => {}} isLast
-            />
-          </Card>
+            <SectionTitle title="Health Profile" />
+            <Card>
+              <NavRow
+                badge="❤️" badgeColor="#ef4444" sfName="heart.fill"
+                label="61.5 kg (current weight)"
+                sublabel="Moderately Active"
+              />
+              <NavRow
+                badge="📋" badgeColor="#ef4444" sfName="doc.text.fill"
+                label="Manage Health Info"
+                onPress={() => {}} isLast
+              />
+            </Card>
 
-          <SectionTitle title="Weight Tracking" />
-          <Card>
-            <NavRow
-              badge="📉" badgeColor="#a855f7"
-              label="61.5 kg"
-              sublabel="Log weight to see trends"
-              onPress={() => {}} isLast
-            />
-          </Card>
+            <SectionTitle title="Weight Tracking" />
+            <Card>
+              <NavRow
+                badge="📉" badgeColor="#a855f7" sfName="chart.line.downtrend.xyaxis"
+                label="61.5 kg"
+                sublabel="Log weight to see trends"
+                onPress={() => {}} isLast
+              />
+            </Card>
 
-          <SectionTitle title="Saved Meals" />
-          <Card>
-            <NavRow
-              badge="🍽" badgeColor="#f97316"
-              label="Manage Saved Meals"
-              sublabel={savedMealsLabel}
-              onPress={() => setSettingsView("savedMeals")} isLast
-            />
-          </Card>
+            <SectionTitle title="Saved Meals" />
+            <Card>
+              <NavRow
+                badge="🍽️" badgeColor="#f97316" sfName="fork.knife"
+                label="Manage Saved Meals"
+                sublabel={savedMealsLabel}
+                onPress={() => setSettingsView("savedMeals")} isLast
+              />
+            </Card>
 
-          <SectionTitle title="Preferences" />
-          <Card>
-            <NavRow
-              badge="🔥" badgeColor="#f97316"
-              label="Calorie Estimate Bias"
-              sublabel="Accurate"
-              onPress={() => {}}
-            />
-            <ToggleRow
-              badge="🔔" badgeColor="#f97316"
-              label="Daily Tracking Reminders"
-              value={reminders}
-              onToggle={() => setReminders(v => !v)}
-              isLast
-            />
-          </Card>
+            <SectionTitle title="Preferences" />
+            <Card>
+              <NavRow
+                badge="🎯" badgeColor="#f97316" sfName="target"
+                label="Calorie Estimate Bias"
+                sublabel="Accurate"
+                onPress={() => {}}
+              />
+              <ToggleRow
+                badge="🔔" badgeColor="#f97316" sfName="bell.fill"
+                label="Daily Tracking Reminders"
+                value={reminders}
+                onToggle={() => setReminders(v => !v)}
+                isLast
+              />
+            </Card>
 
-          <SectionTitle title="Device Settings" />
-          <Card>
-            <NavRow badge="🌙" badgeColor="#636366" label="Appearance" value="System ▾" />
-            <ToggleRow
-              badge="🕐" badgeColor="#22c55e"
-              label="Automatic Time Zone"
-              value={autoTimeZone}
-              onToggle={() => setAutoTimeZone(v => !v)}
-            />
-            <NavRow
-              badge="🎤" badgeColor="#3b82f6"
-              label="Dictation Language"
-              value="Auto-detect ▾"
-              isLast
-            />
-          </Card>
+            <SectionTitle title="Device Settings" />
+            <Card>
+              <AppearanceRow colorMode={colorMode} onToggle={handleToggleAppearance} />
+              <ToggleRow
+                badge="🕐" badgeColor="#22c55e" sfName="clock.fill"
+                label="Automatic Time Zone"
+                value={autoTimeZone}
+                onToggle={() => setAutoTimeZone(v => !v)}
+              />
+              <NavRow
+                badge="🎤" badgeColor="#3b82f6" sfName="mic.fill"
+                label="Dictation Language"
+                value="Auto-detect ▾"
+                isLast
+              />
+            </Card>
 
-          <SectionTitle title="Subscription" />
-          <Card>
-            <NavRow
-              badge="👑" badgeColor="#eab308"
-              label="Subscription Active"
-              sublabel="Tasanka 3 Apr 2025"
-            />
-            <NavRow label="Manage Subscription" onPress={() => {}} isLast />
-          </Card>
+            <SectionTitle title="Subscription" />
+            <Card>
+              <NavRow
+                badge="👑" badgeColor="#eab308" sfName="crown.fill"
+                label="Subscription Active"
+                sublabel="Tasanka 3 Apr 2025"
+              />
+              <NavRow label="Manage Subscription" onPress={() => {}} isLast />
+            </Card>
 
-          <Card>
-            <NavRow badge="⭐" badgeColor="#a855f7" label="Give Feedback" onPress={() => {}} />
-            <NavRow badge="💜" badgeColor="#a855f7" label="About the App" onPress={() => {}} isLast />
-          </Card>
+            <Card>
+              <NavRow badge="⭐" badgeColor="#a855f7" sfName="star.fill" label="Give Feedback" onPress={() => {}} />
+              <NavRow badge="💜" badgeColor="#a855f7" sfName="info.circle.fill" label="About the App" onPress={() => {}} isLast />
+            </Card>
 
-          {/* Destructive */}
-          <Card>
-            <NavRow badge="💬" badgeColor="#3b82f6"  label="Contact Support" onPress={() => {}} />
-            <NavRow badge="🗑"  badgeColor="#636366"  label="Clear Local Cache" onPress={() => {}} />
-            <NavRow badge="📤" badgeColor="#f97316"   label="Export Data" onPress={() => {}} />
-            <NavRow badge="⚠"  badgeColor="#ef4444"  label="Delete Account" onPress={() => {}} />
-            <NavRow badge="🚪" badgeColor="#ef4444"   label="Sign Out" onPress={() => {}} isLast />
-          </Card>
-        </BottomSheetScrollView>
+            {/* Destructive */}
+            <Card>
+              <NavRow badge="💬" badgeColor="#3b82f6" sfName="bubble.left.fill"  label="Contact Support" onPress={() => {}} />
+              <NavRow badge="🗑️" badgeColor="#636366" sfName="trash.fill"         label="Clear Local Cache" onPress={() => {}} />
+              <NavRow badge="📤" badgeColor="#f97316" sfName="square.and.arrow.up.fill" label="Export Data" onPress={() => {}} />
+              <NavRow badge="⚠️" badgeColor="#ef4444" sfName="exclamationmark.triangle.fill" label="Delete Account" onPress={() => {}} />
+              <NavRow badge="🚪" badgeColor="#ef4444" sfName="rectangle.portrait.and.arrow.right.fill" label="Sign Out" onPress={() => {}} isLast />
+            </Card>
+          </BottomSheetScrollView>
+        </ThemeContext.Provider>
       </BottomSheet>
 
       <Modal
@@ -1409,84 +1480,105 @@ const styles = StyleSheet.create({
 
 /* ── settings styles ───────────────────────────────────────────────────────── */
 const sS = StyleSheet.create({
+  /* Header */
   header: {
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "space-between",
-    paddingVertical: spacing.lg,
+    paddingTop: spacing.md,
+    paddingBottom: spacing.xl,
   },
-  title:    { ...typography.title2 },
+  title: { fontSize: 22, fontWeight: "700", letterSpacing: 0.35 },
   closeBtn: {
-    width: 28, height: 28, borderRadius: 14,
-    backgroundColor: "rgba(255,255,255,0.10)",
+    width: 30, height: 30, borderRadius: 15,
     alignItems: "center", justifyContent: "center",
   },
-  closeBtnText: { fontSize: 13, color: colors.textSecondary, lineHeight: 17 },
+  closeBtnText: { fontSize: 14, fontWeight: "500", lineHeight: 18 },
 
+  /* Section label */
   sectionTitle: {
     fontSize: 13,
-    fontWeight: "500",
-    color: colors.systemGray2,
-    letterSpacing: 0.3,
+    fontWeight: "600",
+    letterSpacing: 0.5,
+    textTransform: "uppercase",
     marginBottom: spacing.sm,
-    marginTop: spacing.lg,
-    paddingHorizontal: spacing.xs,
+    marginTop: spacing.xl + 4,
+    paddingHorizontal: spacing.sm,
   },
 
-  /* Card */
-  card: { borderRadius: radius.lg, overflow: "hidden", marginBottom: 0 },
+  /* Card container */
+  card: { borderRadius: radius.xl, overflow: "hidden" },
 
-  /* Row */
+  /* Row layout */
   row: {
     flexDirection: "row",
     alignItems: "center",
     paddingHorizontal: spacing.lg,
-    paddingVertical: 13,
-    minHeight: 50,
+    paddingVertical: 14,
+    minHeight: 56,
     borderBottomWidth: StyleSheet.hairlineWidth,
-    borderBottomColor: "rgba(255,255,255,0.06)",
     gap: spacing.md,
   },
   rowLast: { borderBottomWidth: 0 },
   rowBody: { flex: 1 },
-  rowLabel: { ...typography.subhead, fontWeight: "400" },
-  rowSub: {
-    fontSize: 12, color: colors.systemGray2,
-    marginTop: 2, letterSpacing: -0.1,
-  },
-  rowVal:  { fontSize: 14, color: colors.systemGray },
-  chevron: { fontSize: 20, color: colors.systemGray3, lineHeight: 24 },
+  rowLabel: { fontSize: 16, fontWeight: "400", letterSpacing: -0.2 },
+  rowSub: { fontSize: 12, marginTop: 2, letterSpacing: -0.1 },
+  rowVal:  { fontSize: 14 },
+  chevron: { fontSize: 20, lineHeight: 24 },
 
-  /* Icon — bare glyph, no container */
-  badgeIcon: {
-    fontSize: 18,
-    width: 24,
-    textAlign: "center",
+  /* iOS-style icon badge — colored rounded square */
+  iconBadge: {
+    width: 32, height: 32,
+    borderRadius: 8,
+    alignItems: "center",
+    justifyContent: "center",
     flexShrink: 0,
   },
+  symbol: { width: 18, height: 18 },
+  badgeIcon: { fontSize: 17, lineHeight: 22 },
 
-  /* Toggle — liquid-glass premium treatment */
+  /* Liquid Glass toggle — sized like iOS native switch */
   toggle: {
-    width: 48, height: 28, borderRadius: 14,
-    backgroundColor: "rgba(120,120,128,0.32)",
-    borderWidth: StyleSheet.hairlineWidth,
-    borderColor: "rgba(255,255,255,0.08)",
+    width: 51, height: 31, borderRadius: 15.5,
     justifyContent: "center",
     paddingHorizontal: 2,
     flexShrink: 0,
-  },
-  toggleOn: {
-    backgroundColor: colors.accentGreen,
-    borderColor: "rgba(255,255,255,0.12)",
+    overflow: "hidden",
   },
   thumb: {
-    width: 24, height: 24, borderRadius: 12,
+    width: 27, height: 27, borderRadius: 13.5,
     backgroundColor: "#ffffff",
     shadowColor: "#000",
     shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.25,
+    shadowOpacity: 0.30,
     shadowRadius: 4,
-    elevation: 3,
+    elevation: 4,
   },
   thumbOn: { transform: [{ translateX: 20 }] },
+
+  /* Appearance segmented control */
+  segmentedControl: {
+    flexDirection: "row",
+    backgroundColor: "rgba(120,120,128,0.18)",
+    borderRadius: radius.md,
+    padding: 2,
+    gap: 2,
+  },
+  segBtn: {
+    paddingHorizontal: spacing.md,
+    paddingVertical: spacing.xs + 2,
+    borderRadius: radius.sm,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  segBtnActive: {
+    backgroundColor: "rgba(255,255,255,0.18)",
+    shadowColor: "#000",
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.12,
+    shadowRadius: 2,
+    elevation: 2,
+  },
+  segLabel: { fontSize: 13, fontWeight: "500", color: "rgba(255,255,255,0.55)" },
+  segLabelActive: { color: "#ffffff", fontWeight: "600" },
 });
