@@ -21,8 +21,6 @@ import { GlassView, isLiquidGlassAvailable } from "expo-glass-effect";
 import { SymbolView } from "expo-symbols";
 import { colors, spacing, radius } from "../../theme";
 
-const WEB_BOTTOM_INSET = Platform.OS === "web" ? 34 : 0;
-
 /* ── helpers ──────────────────────────────────────────────────────────────── */
 
 const glass = (fallback) =>
@@ -86,7 +84,7 @@ export function ActionBar({
   /* ─── Collapsed: floating nutrition summary ───────────────────────────── */
   if (!isEditing) {
     return (
-      <View style={[styles.summaryWrapper, Platform.OS === "web" && styles.summaryWrapperWeb]}>
+      <View style={styles.summaryWrapper}>
         <TouchableOpacity
           onPress={onToggleGoals}
           activeOpacity={0.75}
@@ -177,13 +175,7 @@ const styles = StyleSheet.create({
   summaryWrapper: {
     alignItems: "center",
     paddingVertical: spacing.md + 4,
-    paddingBottom: spacing.xl + 4 + WEB_BOTTOM_INSET,
-  },
-  summaryWrapperWeb: {
-    position: "absolute",
-    bottom: 0,
-    left: 0,
-    right: 0,
+    paddingBottom: spacing.xl + 4,
   },
   summaryPill: {
     flexDirection: "row",

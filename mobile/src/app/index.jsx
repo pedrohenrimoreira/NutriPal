@@ -652,38 +652,39 @@ export default function Index() {
           })}
         </ScrollView>
 
-        {/* ── GoalsPanel — animated, collapsed by default ─────────────── */}
-        <AnimatePresence>
-          {goalsExpanded && !keyboardVisible && (
-            <MotiView
-              from={{ opacity: 0, translateY: 20, scale: 0.97 }}
-              animate={{ opacity: 1, translateY: 0, scale: 1 }}
-              exit={{ opacity: 0, translateY: 12, scale: 0.98 }}
-              transition={{
-                type: "spring",
-                damping: 20,
-                stiffness: 180,
-                mass: 0.8,
-              }}
-            >
-              <GoalsPanel totals={totals} />
-            </MotiView>
-          )}
-        </AnimatePresence>
+        {/* ── Bottom area: GoalsPanel + ActionBar pinned to bottom ─────── */}
+        <View style={[styles.bottomContainer, { paddingBottom: insets.bottom + WEB_BOTTOM_INSET }]}>
+          <AnimatePresence>
+            {goalsExpanded && !keyboardVisible && (
+              <MotiView
+                from={{ opacity: 0, translateY: 20, scale: 0.97 }}
+                animate={{ opacity: 1, translateY: 0, scale: 1 }}
+                exit={{ opacity: 0, translateY: 12, scale: 0.98 }}
+                transition={{
+                  type: "spring",
+                  damping: 20,
+                  stiffness: 180,
+                  mass: 0.8,
+                }}
+              >
+                <GoalsPanel totals={totals} />
+              </MotiView>
+            )}
+          </AnimatePresence>
 
-        {/* ── ActionBar ───────────────────────────────────────────────── */}
-        <ActionBar
-          totals={totals}
-          isEditing={isEditing}
-          isListening={isListening}
-          goalsExpanded={goalsExpanded}
-          onToggleGoals={handleToggleGoals}
-          onToggleMic={handleToggleMic}
-          onOpenCamera={handleOpenCamera}
-          onAddSavedMeal={handleAddSavedMeal}
-          onDismissKeyboard={handleDismissKeyboard}
-          onStartEditing={handleStartEditing}
-        />
+          <ActionBar
+            totals={totals}
+            isEditing={isEditing}
+            isListening={isListening}
+            goalsExpanded={goalsExpanded}
+            onToggleGoals={handleToggleGoals}
+            onToggleMic={handleToggleMic}
+            onOpenCamera={handleOpenCamera}
+            onAddSavedMeal={handleAddSavedMeal}
+            onDismissKeyboard={handleDismissKeyboard}
+            onStartEditing={handleStartEditing}
+          />
+        </View>
       </KeyboardAvoidingView>
 
       {/* ── Camera context menu ────────────────────────────────────────── */}
@@ -1079,6 +1080,12 @@ export default function Index() {
 const styles = StyleSheet.create({
   root: { flex: 1, backgroundColor: colors.bgPrimary },
   flex: { flex: 1 },
+  bottomContainer: {
+    position: "absolute",
+    bottom: 0,
+    left: 0,
+    right: 0,
+  },
 
   /* Header */
   header: {
