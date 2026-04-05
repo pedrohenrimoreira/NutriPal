@@ -33,7 +33,7 @@ import { ActionBar } from "../components/journal/ActionBar";
 import { GoalsPanel } from "../components/journal/GoalsPanel";
 import { colors, spacing, radius, typography } from "../theme";
 
-const WEB_TOP_INSET = Platform.OS === "web" ? 67 : 0;
+const WEB_TOP_INSET = Platform.OS === "web" ? 16 : 0;
 const WEB_BOTTOM_INSET = Platform.OS === "web" ? 34 : 0;
 
 /* ── helpers ──────────────────────────────────────────────────────────────── */
@@ -539,8 +539,8 @@ export default function Index() {
         </View>
 
         {/* Right column — fixed width to match left */}
-        <View style={styles.headerSide}>
-          <TouchableOpacity onPress={openSettings} activeOpacity={0.7} style={styles.headerSideRight}>
+        <View style={styles.headerSideRight}>
+          <TouchableOpacity onPress={openSettings} activeOpacity={0.7}>
             <GlassView isInteractive style={[styles.rightPill, glass("rgba(255,255,255,0.10)")]}>
               <Text style={styles.streakText}>🔥</Text>
               <Text style={styles.streakCount}>1</Text>
@@ -1084,11 +1084,12 @@ const styles = StyleSheet.create({
   header: {
     flexDirection: "row",
     alignItems: "center",
-    justifyContent: "space-between",
     paddingHorizontal: spacing.xl,
     paddingBottom: spacing.md,
-    position: "relative",
   },
+  headerSide: { flex: 1 },
+  headerCenter: { flex: 1, alignItems: "center" },
+  headerSideRight: { flex: 1, alignItems: "flex-end" },
   logo: { fontSize: 28 },
   datePillCenter: {
     position: "absolute",
