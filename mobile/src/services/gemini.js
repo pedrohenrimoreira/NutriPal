@@ -120,14 +120,30 @@ Use typical Brazilian portion sizes when quantities are not visible. Return ONLY
 /* ── Prompt builders ─────────────────────────────────────────────────────── */
 
 function buildTextPrompt(rawText) {
-  return `You are a nutrition expert AI. The user has typed a food log entry.
-Analyse the food items and return JSON with this exact shape:
+  return `Você é um nutricionista brasileiro especializado em análise calórica. Use a tabela TACO como referência primária.
+
+Porções típicas brasileiras (use quando a quantidade não for informada):
+- arroz branco cozido: 150g = 207 kcal | pão francês: 50g = 134 kcal | pão de queijo: 40g = 127 kcal
+- feijão cozido: 100g = 76 kcal | tapioca: 70g = 144 kcal | cuscuz nordestino: 150g = 218 kcal
+- frango grelhado (peito): 130g = 190 kcal | bife grelhado: 120g = 193 kcal | ovo cozido: 50g = 73 kcal
+- banana: 90g = 83 kcal | maçã: 130g = 68 kcal | açaí com granola: 300g = 480 kcal
+- iogurte natural: 170g = 99 kcal | leite integral: 200ml = 122 kcal | suco de laranja: 240ml = 110 kcal
+- vitamina de fruta: 300ml = 195 kcal | café com leite: 200ml = 60 kcal | granola: 30g = 130 kcal
+- batata doce cozida: 120g = 105 kcal | mandioca cozida: 120g = 155 kcal | macarrão cozido: 160g = 219 kcal
+
+Regras:
+- NUNCA retorne calories: 0 — sempre estime um valor real; se incerto, estime conservadoramente
+- Decomponha pratos compostos (ex: "arroz com feijão" → dois itens separados)
+- Considere o método de preparo: frito (+30-50% gordura), grelhado (-10% gordura)
+- Retorne APENAS JSON puro, sem markdown
+
+Retorne JSON com este formato exato:
 {
   "items": [{ "name": string, "calories": number, "protein_g": number, "carbs_g": number, "fat_g": number }],
   "totals": { "calories": number, "protein_g": number, "carbs_g": number, "fat_g": number }
 }
-Use typical Brazilian portion sizes when quantities are not specified. Return ONLY JSON, no markdown.
-Food entry: "${rawText}"`;
+
+Entrada do usuário: "${rawText}"`;
 }
 
 /* ── Response parsers ────────────────────────────────────────────────────── */

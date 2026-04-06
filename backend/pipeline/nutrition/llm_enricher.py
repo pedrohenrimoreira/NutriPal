@@ -37,29 +37,41 @@ if TYPE_CHECKING:
 # ---------------------------------------------------------------------------
 
 VISION_VALIDATION_PROMPT = """
-Você é um nutricionista especialista analisando uma foto de refeição.
+Você é um nutricionista especialista analisando uma foto de refeição com foco em precisão calórica.
 
 Você receberá:
 1. Uma foto de um prato de comida
-2. Uma lista de alimentos já detectados por IA (com nomes e quantidades)
+2. Uma lista de alimentos já detectados por IA (com nomes e quantidades estimadas)
 
 Sua tarefa:
-- Validar se os nomes dos alimentos detectados fazem sentido com o que é visível
-- Identificar alimentos que NÃO foram detectados (molhos, temperos, guarnições pequenas)
-- Descrever brevemente a aparência do prato
+- Validar se os nomes dos alimentos detectados fazem sentido com o que é visível na foto
+- Identificar alimentos que NÃO foram detectados: molhos, temperos, guarnições pequenas, acompanhamentos
+- Estimar o tamanho das porções visíveis usando referências visuais:
+  * Prato raso cheio (~400-500g total), meia-porção (~200-250g)
+  * Tigela grande (~300-400ml), tigela pequena (~150-200ml)
+  * Colher de sopa (~15-20g), colher de servir (~50-80g)
+  * Comparar com utensílios ou bordas do prato visíveis
+- Identificar o método de preparo pelo aspecto visual:
+  * Dourado/crocante com superfície oleosa = frito em imersão
+  * Marcas paralelas escuras na superfície = grelhado
+  * Cor pálida e textura úmida = cozido na água ou vapor
+  * Crosta dourada uniforme = assado no forno
+  * Superfície brilhante avermelhada = refogado com molho
+- Incluir no missed_items o método de preparo quando relevante para calorias (ex: "azeite de dendê para refogado", "óleo de fritura absorvido")
+- Descrever cor e textura que indiquem o método de preparo
 - Gerar notas de incerteza em PORTUGUÊS para exibir ao usuário
 - NÃO recalcular calorias ou nutrição — apenas validar e enriquecer
 
 Retorne um JSON com:
 {
   "validated_items": [
-    {"name": "...", "is_correct": true/false, "suggested_name": "..."}
+    {"name": "...", "is_correct": true/false, "suggested_name": "...", "cooking_method": "frito|grelhado|cozido|assado|refogado|cru"}
   ],
   "missed_items": [
-    {"name": "...", "estimated_quantity": "..."}
+    {"name": "...", "estimated_quantity": "...", "cooking_method": "frito|grelhado|cozido|assado|refogado|cru|desconhecido", "visual_cue": "descrição do que na foto indica a presença deste item"}
   ],
-  "plate_description": "...",
-  "uncertainty_notes": "...",
+  "plate_description": "descrição detalhada do prato incluindo cores, texturas e método de preparo aparente",
+  "uncertainty_notes": "notas em português sobre o que pode estar impreciso na estimativa calórica",
   "overall_confidence": "high" | "medium" | "low"
 }
 """.strip()
@@ -120,7 +132,11 @@ async def validate_and_enrich(
     )
     user_message = (
         f"Alimentos detectados pela IA:\n{detection_list}\n\n"
-        "Analise a imagem e retorne o JSON de validação conforme instruído."
+        "Analise a imagem com atenção especial a:\n"
+        "1. Tamanho real das porções comparado com o prato/utensílios visíveis\n"
+        "2. Método de preparo (cor, textura, brilho, marcas de grelha)\n"
+        "3. Ingredientes ocultos ou secundários (molhos, óleos, temperos, guarnições)\n"
+        "Retorne o JSON de validação conforme instruído."
     )
 
     image_bytes = _pil_to_bytes(image)
