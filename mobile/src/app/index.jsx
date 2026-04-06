@@ -28,6 +28,7 @@ import { useJournalStore, useDailyTotals, getEntriesForDate } from "../store/jou
 import { useSettingsStore } from "../store/settingsStore";
 import { useThemeStore } from "../store/themeStore";
 import { estimateNutritionFromText } from "../utils/nutrition";
+import { analyzeTextEntry } from "../services/gemini";
 import { useSpeechRecognition } from "../hooks/useSpeechRecognition";
 import { MealEntryCard } from "../components/journal/MealEntryCard";
 import { ActionBar } from "../components/journal/ActionBar";
@@ -220,6 +221,9 @@ export default function Index() {
   const [cardIsEditing, setCardIsEditing] = useState(false);
   const [text, setText] = useState("");
   const textRef = useRef("");
+  const [liveAnalysis, setLiveAnalysis] = useState(null);
+  const [isAnalyzing, setIsAnalyzing] = useState(false);
+  const analysisTimerRef = useRef(null);
   const [keyboardVisible, setKeyboardVisible] = useState(false);
   const [keyboardHeight, setKeyboardHeight] = useState(0);
   const [goalsExpanded, setGoalsExpanded] = useState(false);
@@ -320,12 +324,11 @@ export default function Index() {
   }, [transcript, isEditing]);
 
   /* handlers -------------------------------------------------------------- */
-  const debounceTimerRef = useRef(null);
 
   const cancelDebounce = useCallback(() => {
-    if (debounceTimerRef.current) {
-      clearTimeout(debounceTimerRef.current);
-      debounceTimerRef.current = null;
+    if (analysisTimerRef.current) {
+      clearTimeout(analysisTimerRef.current);
+      analysisTimerRef.current = null;
     }
   }, []);
 
@@ -339,6 +342,8 @@ export default function Index() {
       setIsEditing(false);
       textRef.current = "";
       setText("");
+      setLiveAnalysis(null);
+      setIsAnalyzing(false);
       setDate(offsetDay(selectedDate, -1));
     } else if (x > width * 1.5) {
       cancelDebounce();
@@ -346,6 +351,8 @@ export default function Index() {
       setIsEditing(false);
       textRef.current = "";
       setText("");
+      setLiveAnalysis(null);
+      setIsAnalyzing(false);
       setDate(offsetDay(selectedDate, +1));
     }
     // If user bounced back to center, no state change needed
@@ -357,16 +364,13 @@ export default function Index() {
     setTimeout(() => inputRef.current?.focus(), 50);
   }, []);
 
-  const handleSubmit = useCallback(async () => {
-    cancelDebounce();
-
+  const commitCurrentText = useCallback(async () => {
     if (isListening) {
       stopListening();
     }
 
     const raw = textRef.current.trim();
     if (!raw) {
-      // Empty submit = dismiss keyboard
       Keyboard.dismiss();
       setIsEditing(false);
       return;
@@ -375,6 +379,8 @@ export default function Index() {
     const blocks = raw.split(/\n\s*\n/).map((b) => b.trim()).filter(Boolean);
     textRef.current = "";
     setText("");
+    setLiveAnalysis(null);
+    setIsAnalyzing(false);
     clearTranscript();
     dictationBaseTextRef.current = "";
 
@@ -382,22 +388,48 @@ export default function Index() {
       await addTextEntry(block);
     }
 
-    // Stay in editing mode — notebook cursor stays at the bottom
-    // The user can dismiss with the keyboard button when done
     setTimeout(() => scrollRef.current?.scrollToEnd({ animated: true }), 100);
-  }, [cancelDebounce, addTextEntry, clearTranscript, isListening, stopListening]);
+  }, [addTextEntry, clearTranscript, isListening, stopListening]);
+
+  const handleSubmit = useCallback(async () => {
+    cancelDebounce();
+    await commitCurrentText();
+  }, [cancelDebounce, commitCurrentText]);
 
   const handleTextChange = useCallback((value) => {
     textRef.current = value;
     setText(value);
     cancelDebounce();
-    if (value.trim()) {
-      debounceTimerRef.current = setTimeout(() => {
-        debounceTimerRef.current = null;
-        handleSubmit();
-      }, 1000);
+
+    if (!value.trim()) {
+      setLiveAnalysis(null);
+      setIsAnalyzing(false);
+      return;
     }
-  }, [cancelDebounce, handleSubmit]);
+
+    if (value.endsWith("\n\n")) {
+      commitCurrentText();
+      return;
+    }
+
+    setIsAnalyzing(true);
+    analysisTimerRef.current = setTimeout(async () => {
+      analysisTimerRef.current = null;
+      const snapshotText = textRef.current.trim();
+      if (!snapshotText) {
+        setLiveAnalysis(null);
+        setIsAnalyzing(false);
+        return;
+      }
+      const savedMeals = useSettingsStore.getState().savedMeals;
+      const fallbackFn = (t) => estimateNutritionFromText(t, savedMeals);
+      const result = await analyzeTextEntry(snapshotText, fallbackFn);
+      if (textRef.current.trim() === snapshotText) {
+        setLiveAnalysis(result);
+        setIsAnalyzing(false);
+      }
+    }, 1000);
+  }, [cancelDebounce, commitCurrentText]);
 
   const handleDismissKeyboard = useCallback(() => {
     cancelDebounce();
@@ -734,21 +766,38 @@ export default function Index() {
                 {/* ── Input block — always visible on active day ────────── */}
                 {isActive && (
                   isEditing ? (
-                    <TextInput
-                      ref={inputRef}
-                      value={text}
-                      onChangeText={handleTextChange}
-                      placeholder={
-                        dayEntries.length === 0
-                          ? "O que você comeu?..."
-                          : "Continuar a anotar..."
-                      }
-                      placeholderTextColor={C.textTertiary}
-                      style={[styles.inlineInput, { color: C.textPrimary }]}
-                      multiline
-                      autoFocus
-                      blurOnSubmit={false}
-                    />
+                    <View style={styles.inlineInputBlock}>
+                      <TextInput
+                        ref={inputRef}
+                        value={text}
+                        onChangeText={handleTextChange}
+                        placeholder={
+                          dayEntries.length === 0
+                            ? "O que você comeu?..."
+                            : "Continuar a anotar..."
+                        }
+                        placeholderTextColor={C.textTertiary}
+                        style={[styles.inlineInput, { color: C.textPrimary }]}
+                        multiline
+                        autoFocus
+                        blurOnSubmit={false}
+                      />
+                      {isAnalyzing && (
+                        <Text style={[styles.liveAnalysisHint, { color: C.textTertiary }]}>analisando…</Text>
+                      )}
+                      {!isAnalyzing && liveAnalysis && liveAnalysis.totals?.calories > 0 && (
+                        <View style={styles.liveAnalysisRow}>
+                          <Text style={[styles.liveAnalysisKcal, { color: C.textSecondary }]}>
+                            {Math.round(liveAnalysis.totals.calories)} kcal
+                          </Text>
+                          {liveAnalysis.items?.length > 0 && (
+                            <Text style={[styles.liveAnalysisItems, { color: C.textTertiary }]}>
+                              {liveAnalysis.items.map((it) => it.name).join(" · ")}
+                            </Text>
+                          )}
+                        </View>
+                      )}
+                    </View>
                   ) : (
                     <TouchableOpacity
                       onPress={handleStartEditing}
@@ -1279,15 +1328,46 @@ const styles = StyleSheet.create({
     flexGrow: 1,
   },
 
+  /* Inline input block — wraps TextInput + live analysis annotation */
+  inlineInputBlock: {
+    paddingTop: spacing.lg,
+  },
+
   /* Inline input — transparent, note-like, sits below entries */
   inlineInput: {
     ...typography.body,
     color: "rgba(255,255,255,0.90)",
     minHeight: 48,
     textAlignVertical: "top",
-    paddingTop: spacing.lg,
+    paddingTop: 0,
     letterSpacing: -0.3,
     lineHeight: 26,
+  },
+
+  /* Live analysis annotation row */
+  liveAnalysisRow: {
+    flexDirection: "row",
+    alignItems: "baseline",
+    gap: spacing.xs,
+    marginTop: spacing.xs,
+    paddingBottom: spacing.xs,
+  },
+  liveAnalysisKcal: {
+    fontSize: 12,
+    fontWeight: "600",
+    letterSpacing: -0.1,
+  },
+  liveAnalysisItems: {
+    fontSize: 12,
+    flex: 1,
+    flexWrap: "wrap",
+    letterSpacing: -0.1,
+  },
+  liveAnalysisHint: {
+    fontSize: 12,
+    fontStyle: "italic",
+    marginTop: spacing.xs,
+    letterSpacing: 0.3,
   },
 
   /* Placeholder — subtle notebook opening prompt */

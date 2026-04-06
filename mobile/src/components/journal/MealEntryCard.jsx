@@ -121,7 +121,7 @@ export function MealEntryCard({ entry, onDelete, onEdit, onEditingChange }) {
   }, [editText, commitEdit, setEditing]);
 
   return (
-    <View style={[styles.entry, { borderBottomColor: C.separator }]}>
+    <View style={styles.entry}>
       {/* ── Meta row: time · processing indicator · kcal ─────────────── */}
       <View style={styles.meta}>
         <Text style={[styles.time, { color: C.textTertiary }]}>{time}</Text>
@@ -203,7 +203,6 @@ const styles = StyleSheet.create({
   entry: {
     paddingTop: spacing.lg,
     paddingBottom: spacing.lg,
-    borderBottomWidth: StyleSheet.hairlineWidth,
   },
 
   meta: {
