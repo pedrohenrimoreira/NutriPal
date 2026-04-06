@@ -12,12 +12,12 @@ import React, {
 import {
   View, Text, TextInput, TouchableOpacity, ScrollView,
   KeyboardAvoidingView, Platform, StyleSheet, Keyboard, LayoutAnimation,
-  useWindowDimensions, Modal, Alert, Appearance,
+  useWindowDimensions, Modal, Alert, Appearance, Switch,
 } from "react-native";
 
 import * as ImagePicker from "expo-image-picker";
 import { SymbolView } from "expo-symbols";
-import { GlassView, isLiquidGlassAvailable } from "expo-glass-effect";
+import { GlassView, GlassContainer, isLiquidGlassAvailable } from "expo-glass-effect";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { StatusBar } from "expo-status-bar";
 import BottomSheet, { BottomSheetView, BottomSheetScrollView } from "@gorhom/bottom-sheet";
@@ -114,18 +114,23 @@ function ToggleRow({ badge, badgeColor, sfName, label, sublabel, value, onToggle
         <Text style={sS.rowLabel}>{label}</Text>
         {sublabel ? <Text style={sS.rowSub}>{sublabel}</Text> : null}
       </View>
-      <TouchableOpacity onPress={onToggle} activeOpacity={0.8}>
+      <GlassContainer>
         <GlassView
           isInteractive={false}
           style={[
-            sS.toggle,
+            sS.toggleWrapper,
             !isLiquidGlassAvailable() && { backgroundColor: "rgba(120,120,128,0.32)" },
-            value && sS.toggleOn,
           ]}
         >
-          <View style={[sS.thumb, value && sS.thumbOn]} />
+          <Switch
+            value={value}
+            onValueChange={onToggle}
+            trackColor={{ false: "transparent", true: colors.accentGreen }}
+            thumbColor="#ffffff"
+            ios_backgroundColor="transparent"
+          />
         </GlassView>
-      </TouchableOpacity>
+      </GlassContainer>
     </View>
   );
 }
@@ -1580,27 +1585,14 @@ const sS = StyleSheet.create({
     flexShrink: 0,
   },
   symbol: { width: 18, height: 18 },
-  badgeIcon: { fontSize: 17, lineHeight: 22 },
 
-  /* Liquid Glass toggle — sized like iOS native switch */
-  toggle: {
-    width: 51, height: 31, borderRadius: 15.5,
-    justifyContent: "center",
-    paddingHorizontal: 2,
-    flexShrink: 0,
+  /* Glass wrapper for native Switch — clips glass tint to switch bounds */
+  toggleWrapper: {
+    borderRadius: 15.5,
     overflow: "hidden",
+    flexShrink: 0,
   },
-  thumb: {
-    width: 27, height: 27, borderRadius: 13.5,
-    backgroundColor: "#ffffff",
-    shadowColor: "#000",
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.30,
-    shadowRadius: 4,
-    elevation: 4,
-  },
-  thumbOn: { transform: [{ translateX: 20 }] },
-  toggleOn: { backgroundColor: colors.accentGreen },
+  badgeIcon: { fontSize: 17, lineHeight: 22 },
 
   /* Appearance segmented control */
   segmentedControl: {
