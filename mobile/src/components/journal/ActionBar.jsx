@@ -76,7 +76,6 @@ export function ActionBar({
   onOpenCamera,
   onAddSavedMeal,
   onDismissKeyboard,
-  onLogEntry,
 }) {
   const C   = useThemeStore((s) => s.colors);
   const cal   = Math.round(totals.calories);
@@ -165,14 +164,6 @@ export function ActionBar({
           color={colors.textSecondary}
           onPress={onDismissKeyboard}
           label="Fechar teclado"
-        />
-        {/* Primary action: log the current entry */}
-        <ActionBtn
-          sfName="checkmark"
-          fallback="✓"
-          color={colors.accentGreen}
-          onPress={onLogEntry}
-          label="Registrar"
         />
       </View>
     </View>

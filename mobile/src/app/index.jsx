@@ -211,6 +211,7 @@ export default function Index() {
 
   const [isEditing, setIsEditing] = useState(false);
   const [text, setText] = useState("");
+  const textRef = useRef("");
   const [keyboardVisible, setKeyboardVisible] = useState(false);
   const [keyboardHeight, setKeyboardHeight] = useState(0);
   const [goalsExpanded, setGoalsExpanded] = useState(false);
@@ -299,6 +300,7 @@ export default function Index() {
 
     const base = dictationBaseTextRef.current.trim();
     const nextText = [base, transcript].filter(Boolean).join(" ").trim();
+    textRef.current = nextText;
     setText(nextText);
 
     if (!isEditing) {
@@ -309,21 +311,36 @@ export default function Index() {
   }, [transcript, isEditing]);
 
   /* handlers -------------------------------------------------------------- */
+  const debounceTimerRef = useRef(null);
+
+  const cancelDebounce = useCallback(() => {
+    if (debounceTimerRef.current) {
+      clearTimeout(debounceTimerRef.current);
+      debounceTimerRef.current = null;
+    }
+  }, []);
+
+  useEffect(() => () => cancelDebounce(), [cancelDebounce]);
+
   const handleDaySwipe = useCallback((e) => {
     const x = e.nativeEvent.contentOffset.x;
     if (x < width * 0.5) {
+      cancelDebounce();
       Keyboard.dismiss();
       setIsEditing(false);
+      textRef.current = "";
       setText("");
       setDate(offsetDay(selectedDate, -1));
     } else if (x > width * 1.5) {
+      cancelDebounce();
       Keyboard.dismiss();
       setIsEditing(false);
+      textRef.current = "";
       setText("");
       setDate(offsetDay(selectedDate, +1));
     }
     // If user bounced back to center, no state change needed
-  }, [selectedDate, setDate, width]);
+  }, [cancelDebounce, selectedDate, setDate, width]);
 
   const handleStartEditing = useCallback(() => {
     LayoutAnimation.configureNext(LayoutAnimation.Presets.easeInEaseOut);
@@ -331,13 +348,14 @@ export default function Index() {
     setTimeout(() => inputRef.current?.focus(), 50);
   }, []);
 
-  // Submit on Enter — keep keyboard open for continuous notebook logging
   const handleSubmit = useCallback(async () => {
+    cancelDebounce();
+
     if (isListening) {
       stopListening();
     }
 
-    const raw = text.trim();
+    const raw = textRef.current.trim();
     if (!raw) {
       // Empty submit = dismiss keyboard
       Keyboard.dismiss();
@@ -345,22 +363,41 @@ export default function Index() {
       return;
     }
 
-    await addTextEntry(raw);
+    const blocks = raw.split(/\n\s*\n/).map((b) => b.trim()).filter(Boolean);
+    textRef.current = "";
     setText("");
     clearTranscript();
     dictationBaseTextRef.current = "";
+
+    for (const block of blocks) {
+      await addTextEntry(block);
+    }
+
     // Stay in editing mode — notebook cursor stays at the bottom
     // The user can dismiss with the keyboard button when done
     setTimeout(() => scrollRef.current?.scrollToEnd({ animated: true }), 100);
-  }, [text, addTextEntry, clearTranscript, isListening, stopListening]);
+  }, [cancelDebounce, addTextEntry, clearTranscript, isListening, stopListening]);
+
+  const handleTextChange = useCallback((value) => {
+    textRef.current = value;
+    setText(value);
+    cancelDebounce();
+    if (value.trim()) {
+      debounceTimerRef.current = setTimeout(() => {
+        debounceTimerRef.current = null;
+        handleSubmit();
+      }, 1500);
+    }
+  }, [cancelDebounce, handleSubmit]);
 
   const handleDismissKeyboard = useCallback(() => {
+    cancelDebounce();
     if (isListening) {
       stopListening();
     }
     Keyboard.dismiss();
     setIsEditing(false);
-  }, [isListening, stopListening]);
+  }, [cancelDebounce, isListening, stopListening]);
 
   const handleToggleMic = useCallback(async () => {
     if (isListening) {
@@ -687,7 +724,7 @@ export default function Index() {
                     <TextInput
                       ref={inputRef}
                       value={text}
-                      onChangeText={setText}
+                      onChangeText={handleTextChange}
                       placeholder={
                         dayEntries.length === 0
                           ? "O que você comeu?..."
@@ -762,8 +799,6 @@ export default function Index() {
             onOpenCamera={handleOpenCamera}
             onAddSavedMeal={handleAddSavedMeal}
             onDismissKeyboard={handleDismissKeyboard}
-            onStartEditing={handleStartEditing}
-            onLogEntry={() => void handleSubmit()}
           />
         </View>
       </KeyboardAvoidingView>
