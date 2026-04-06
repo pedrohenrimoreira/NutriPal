@@ -143,7 +143,7 @@ export function MealEntryCard({ entry, onDelete, onEdit }) {
             autoFocus
             multiline
             scrollEnabled={false}
-            selectionColor={C.accent ?? colors.systemBlue}
+            selectionColor={C.accent ?? "#007AFF"}
             underlineColorAndroid="transparent"
           />
         ) : (
@@ -267,6 +267,6 @@ const styles = StyleSheet.create({
   deleteIcon: {
     fontSize: 13,
     fontWeight: "500",
-    color: colors.systemGray3,
+    color: "#48484a",
   },
 });
