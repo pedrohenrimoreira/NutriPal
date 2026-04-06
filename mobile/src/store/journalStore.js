@@ -5,6 +5,7 @@
 import { useState, useCallback } from "react";
 import { estimateNutritionFromText } from "../utils/nutrition";
 import { useSettingsStore } from "./settingsStore";
+import { analyzeTextEntry, analyzeImageEntry } from "../services/gemini";
 
 function toDateStr(d) {
   const y = d.getFullYear();
@@ -96,11 +97,11 @@ export function useJournalStore() {
       forceRender((n) => n + 1);
 
       const savedMeals = useSettingsStore.getState().savedMeals;
-      const parsed = estimateNutritionFromText(trimmed, savedMeals);
+      const fallbackFn = (text) => estimateNutritionFromText(text, savedMeals);
 
-      setTimeout(() => {
+      analyzeTextEntry(trimmed, fallbackFn).then((parsed) => {
         _updateParsedResult(entry.id, parsed, forceRender);
-      }, parsed.matchedSavedMeal ? 120 : 350);
+      });
 
       return entry.id;
     },
@@ -120,11 +121,16 @@ export function useJournalStore() {
         imageUri: imageAsset.uri,
         imageAsset,
         image: imageAsset,
-        isProcessing: false,
+        isProcessing: true,
       };
       _entries[selectedDate] = [...(_entries[selectedDate] ?? []), entry];
       notify();
       forceRender((n) => n + 1);
+
+      analyzeImageEntry(imageAsset.uri).then((parsed) => {
+        _updateParsedResult(entry.id, parsed, forceRender);
+      });
+
       return entry.id;
     },
     [selectedDate],

@@ -1,16 +1,22 @@
 """
 pipeline/text/sonnet_parser.py — Parser de texto complexo via LLM médio.
 
-Camada 2: usa Claude Sonnet 4.6 ou Gemini Pro 2.5.
+Camada 2: usa Gemini Pro 2.5.
 Custo estimado: < $0.02 por chamada.
 
 Ativado quando: prato elaborado, receita, nome de preparação regional.
 Exemplos: "moqueca de camarão", "lasanha bolonhesa", "coxinha de frango".
 
-Biblioteca: anthropic (Claude) ou google-generativeai (Gemini)
+Biblioteca: google-generativeai (Gemini)
 """
 
 from __future__ import annotations
+
+import json
+import os
+import re
+
+import google.generativeai as genai
 
 from models.schemas import NutritionItemResponse
 
@@ -56,12 +62,27 @@ Formato de retorno (mesmo do parser simples):
 """.strip()
 
 
+def _get_model() -> genai.GenerativeModel:
+    api_key = os.environ.get("GEMINI_API_KEY")
+    if not api_key:
+        raise RuntimeError("GEMINI_API_KEY not set in environment")
+    genai.configure(api_key=api_key)
+    return genai.GenerativeModel(
+        model_name="gemini-2.5-flash",
+        system_instruction=SONNET_SYSTEM_PROMPT,
+        generation_config=genai.GenerationConfig(
+            temperature=0.3,
+            max_output_tokens=2048,
+        ),
+    )
+
+
 async def parse_complex(
     text: str,
     unresolved_items: list[str],
 ) -> list[NutritionItemResponse]:
     """
-    Usa LLM médio para resolver pratos complexos e regionais.
+    Usa Gemini Pro para resolver pratos complexos e regionais.
 
     Args:
         text: texto original do usuário (contexto).
@@ -69,7 +90,35 @@ async def parse_complex(
 
     Returns:
         Lista de NutritionItemResponse com ingredientes decompostos.
-
-    TODO: implement — chamar Anthropic Sonnet ou Gemini Pro com SONNET_SYSTEM_PROMPT.
     """
-    raise NotImplementedError("TODO: implement parse_complex")
+    model = _get_model()
+
+    user_message = (
+        f"Contexto do usuário: {text}\n\n"
+        f"Pratos/alimentos a analisar e decompor: {', '.join(unresolved_items)}"
+    )
+
+    response = await model.generate_content_async(user_message)
+    raw = response.text.strip()
+    match = re.search(r"\[.*\]", raw, re.DOTALL)
+    if match:
+        raw = match.group(0)
+
+    try:
+        items_data: list[dict] = json.loads(raw)
+    except json.JSONDecodeError as exc:
+        raise ValueError(f"parse_complex: resposta inválida do Gemini — {exc}") from exc
+
+    return [
+        NutritionItemResponse(
+            name=item["name"],
+            quantity_description=item.get("quantity_description", "porção estimada"),
+            calories=float(item.get("calories", 0)),
+            protein_g=float(item.get("protein_g", 0)),
+            carbs_g=float(item.get("carbs_g", 0)),
+            fat_g=float(item.get("fat_g", 0)),
+            confidence=item.get("confidence", "low"),
+            resolved_by=item.get("resolved_by", "llm_medium"),
+        )
+        for item in items_data
+    ]

@@ -17,8 +17,14 @@ Output: detecções refinadas + uncertainty_notes
 
 from __future__ import annotations
 
+import io
+import json
+import os
+import re
 from dataclasses import dataclass
 from typing import TYPE_CHECKING
+
+import google.generativeai as genai
 
 if TYPE_CHECKING:
     from PIL import Image as PILImage
@@ -70,6 +76,28 @@ class EnrichmentResult:
     overall_confidence: str
 
 
+def _get_model() -> genai.GenerativeModel:
+    api_key = os.environ.get("GEMINI_API_KEY")
+    if not api_key:
+        raise RuntimeError("GEMINI_API_KEY not set in environment")
+    genai.configure(api_key=api_key)
+    return genai.GenerativeModel(
+        model_name="gemini-2.5-flash",
+        system_instruction=VISION_VALIDATION_PROMPT,
+        generation_config=genai.GenerationConfig(
+            temperature=0.2,
+            max_output_tokens=1024,
+        ),
+    )
+
+
+def _pil_to_bytes(image: "PILImage.Image") -> bytes:
+    buf = io.BytesIO()
+    fmt = image.format or "JPEG"
+    image.save(buf, format=fmt)
+    return buf.getvalue()
+
+
 async def validate_and_enrich(
     image: "PILImage.Image",
     detections: list["DetectionResult"],
@@ -83,7 +111,41 @@ async def validate_and_enrich(
 
     Returns:
         EnrichmentResult com validações, itens perdidos e notas.
-
-    TODO: implement — chamar google.generativeai com imagem + prompt.
     """
-    raise NotImplementedError("TODO: implement validate_and_enrich")
+    model = _get_model()
+
+    detection_list = "\n".join(
+        f"- {d.label} (quantidade estimada: {getattr(d, 'quantity_description', 'desconhecida')})"
+        for d in detections
+    )
+    user_message = (
+        f"Alimentos detectados pela IA:\n{detection_list}\n\n"
+        "Analise a imagem e retorne o JSON de validação conforme instruído."
+    )
+
+    image_bytes = _pil_to_bytes(image)
+    mime_type = f"image/{(image.format or 'jpeg').lower()}"
+
+    response = await model.generate_content_async(
+        [
+            {"mime_type": mime_type, "data": image_bytes},
+            user_message,
+        ]
+    )
+
+    raw = response.text.strip()
+    match = re.search(r"\{.*\}", raw, re.DOTALL)
+    if match:
+        raw = match.group(0)
+    try:
+        data: dict = json.loads(raw)
+    except json.JSONDecodeError as exc:
+        raise ValueError(f"validate_and_enrich: resposta inválida do Gemini — {exc}") from exc
+
+    return EnrichmentResult(
+        validated_items=data.get("validated_items", []),
+        missed_items=data.get("missed_items", []),
+        plate_description=data.get("plate_description", ""),
+        uncertainty_notes=data.get("uncertainty_notes", ""),
+        overall_confidence=data.get("overall_confidence", "low"),
+    )

@@ -19,7 +19,7 @@ dependencies = [
     # IA / ML (descomente conforme necessário)
     # "ultralytics>=8.3.0",       # YOLOv11
     # "segment-anything-2",       # SAM 2
-    # "google-generativeai>=0.8.0", # Gemini
+    "google-generativeai>=0.8.0", # Gemini
     # "anthropic>=0.39.0",        # Claude
 ]
 
