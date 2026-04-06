@@ -17,7 +17,7 @@ import {
 
 import * as ImagePicker from "expo-image-picker";
 import { SymbolView } from "expo-symbols";
-import { GlassView, GlassContainer, isLiquidGlassAvailable } from "expo-glass-effect";
+import { GlassView, isLiquidGlassAvailable } from "expo-glass-effect";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { StatusBar } from "expo-status-bar";
 import BottomSheet, { BottomSheetView, BottomSheetScrollView } from "@gorhom/bottom-sheet";
@@ -116,23 +116,18 @@ function ToggleRow({ badge, badgeColor, sfName, label, sublabel, value, onToggle
         <Text style={[sS.rowLabel, { color: C.textPrimary }]}>{label}</Text>
         {sublabel ? <Text style={[sS.rowSub, { color: C.textSecondary }]}>{sublabel}</Text> : null}
       </View>
-      <GlassContainer>
-        <GlassView
-          isInteractive={false}
-          style={[
-            sS.toggleWrapper,
-            value && { backgroundColor: C.accentGreen },
-          ]}
-        >
-          <Switch
-            value={value}
-            onValueChange={onToggle}
-            trackColor={{ false: "transparent", true: colors.accentGreen }}
-            thumbColor="#ffffff"
-            ios_backgroundColor="transparent"
-          />
-        </GlassView>
-      </GlassContainer>
+      <View style={[
+        sS.toggleWrapper,
+        { backgroundColor: value ? C.accentGreen : "rgba(120,120,128,0.32)" },
+      ]}>
+        <Switch
+          value={value}
+          onValueChange={onToggle}
+          trackColor={{ false: "transparent", true: "transparent" }}
+          thumbColor="#ffffff"
+          ios_backgroundColor="transparent"
+        />
+      </View>
     </View>
   );
 }
@@ -819,7 +814,6 @@ export default function Index() {
                 onOpenCamera={handleOpenCamera}
                 onAddSavedMeal={handleAddSavedMeal}
                 onDismissKeyboard={handleDismissKeyboard}
-                onLogEntry={handleSubmit}
               />
             </View>
           );
