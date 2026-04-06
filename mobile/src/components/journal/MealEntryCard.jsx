@@ -6,7 +6,7 @@
  * parsed nutrition breakdown — all inline, notebook-style.
  */
 import React from "react";
-import { View, Text, StyleSheet } from "react-native";
+import { View, Text, StyleSheet, TouchableOpacity } from "react-native";
 import { Image } from "expo-image";
 import { useThemeStore } from "../../store/themeStore";
 import { colors, spacing, radius, typography } from "../../theme";
@@ -30,7 +30,7 @@ function buildImageCaption(imageAsset) {
   return parts.join(" · ");
 }
 
-export function MealEntryCard({ entry }) {
+export function MealEntryCard({ entry, onDelete }) {
   const C = useThemeStore((s) => s.colors);
 
   const time = new Date(entry.createdAt).toLocaleTimeString("pt-BR", {
@@ -59,6 +59,15 @@ export function MealEntryCard({ entry }) {
               {Math.round(entry.parsedResult.totals.calories)} kcal
             </Text>
           ) : null}
+          {onDelete && (
+            <TouchableOpacity
+              onPress={() => onDelete(entry.id)}
+              hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+              style={styles.deleteButton}
+            >
+              <Text style={[styles.deleteIcon, { color: C.textTertiary }]}>✕</Text>
+            </TouchableOpacity>
+          )}
         </View>
       </View>
 
@@ -178,5 +187,15 @@ const styles = StyleSheet.create({
   breakdownCal: {
     color: colors.systemGray3,
     fontWeight: "400",
+  },
+
+  deleteButton: {
+    marginLeft: spacing.xs,
+    padding: 2,
+  },
+  deleteIcon: {
+    fontSize: 13,
+    fontWeight: "500",
+    color: colors.systemGray3,
   },
 });

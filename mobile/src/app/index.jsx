@@ -188,6 +188,7 @@ export default function Index() {
     setDate,
     addTextEntry,
     addImageEntry,
+    removeEntry,
   } = useJournalStore();
   const totals = useDailyTotals(entries);
   const savedMeals = useSettingsStore((state) => state.savedMeals);
@@ -386,7 +387,7 @@ export default function Index() {
       debounceTimerRef.current = setTimeout(() => {
         debounceTimerRef.current = null;
         handleSubmit();
-      }, 1500);
+      }, 1000);
     }
   }, [cancelDebounce, handleSubmit]);
 
@@ -710,7 +711,7 @@ export default function Index() {
 
                 {/* ── Entries always rendered (notebook page) ──────────── */}
                 {dayEntries.map((entry) => (
-                  <MealEntryCard key={entry.id} entry={entry} />
+                  <MealEntryCard key={entry.id} entry={entry} onDelete={isActive ? removeEntry : undefined} />
                 ))}
 
                 {/* Inactive day empty state */}
@@ -718,43 +719,22 @@ export default function Index() {
                   <Text style={styles.placeholder}>Sem registros neste dia.</Text>
                 )}
 
-                {/* ── Input or tap-to-write prompt — active day only ───── */}
+                {/* ── Input block — always visible on active day ────────── */}
                 {isActive && (
-                  isEditing ? (
-                    <TextInput
-                      ref={inputRef}
-                      value={text}
-                      onChangeText={handleTextChange}
-                      placeholder={
-                        dayEntries.length === 0
-                          ? "O que você comeu?..."
-                          : "Continuar a anotar..."
-                      }
-                      placeholderTextColor={colors.systemGray3}
-                      style={[styles.inlineInput, { color: C.textPrimary }]}
-                      multiline
-                      autoFocus
-                      blurOnSubmit={false}
-                    />
-                  ) : (
-                    <TouchableOpacity
-                      onPress={handleStartEditing}
-                      style={styles.writingPromptArea}
-                      activeOpacity={0.5}
-                    >
-                      <Text
-                        style={
-                          dayEntries.length === 0
-                            ? styles.placeholder
-                            : styles.continuePrompt
-                        }
-                      >
-                        {dayEntries.length === 0
-                          ? "O que você comeu?..."
-                          : "Continuar a anotar..."}
-                      </Text>
-                    </TouchableOpacity>
-                  )
+                  <TextInput
+                    ref={inputRef}
+                    value={text}
+                    onChangeText={handleTextChange}
+                    placeholder={
+                      dayEntries.length === 0
+                        ? "O que você comeu?..."
+                        : "Continuar a anotar..."
+                    }
+                    placeholderTextColor={colors.systemGray3}
+                    style={[styles.inlineInput, { color: C.textPrimary }]}
+                    multiline
+                    blurOnSubmit={false}
+                  />
                 )}
               </ScrollView>
             );
