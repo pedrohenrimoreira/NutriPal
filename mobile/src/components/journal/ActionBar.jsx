@@ -20,7 +20,7 @@ import {
 import { GlassView, isLiquidGlassAvailable } from "expo-glass-effect";
 import { SymbolView } from "expo-symbols";
 import { useThemeStore } from "../../store/themeStore";
-import { colors, spacing, radius } from "../../theme";
+import { spacing, radius } from "../../theme";
 
 /* ── helpers ──────────────────────────────────────────────────────────────── */
 
@@ -52,10 +52,10 @@ function ActionBtn({ sfName, fallback, color, onPress, label, active }) {
             name={sfName}
             style={styles.symbol}
             type="monochrome"
-            tintColor={color ?? colors.textSecondary}
+            tintColor={color}
           />
         ) : (
-          <Text style={[styles.fallbackIcon, { color: color ?? colors.textSecondary }]}>
+          <Text style={[styles.fallbackIcon, { color }]}>
             {fallback}
           </Text>
         )}
@@ -76,6 +76,7 @@ export function ActionBar({
   onOpenCamera,
   onAddSavedMeal,
   onDismissKeyboard,
+  onLogEntry,
 }) {
   const C   = useThemeStore((s) => s.colors);
   const cal   = Math.round(totals.calories);
@@ -98,21 +99,21 @@ export function ActionBar({
           >
             <View style={styles.group}>
               <Text style={styles.flame}>🔥</Text>
-              <Text style={[styles.val, { color: colors.accentOrange }]}>{cal}</Text>
+              <Text style={[styles.val, { color: C.accentOrange }]}>{cal}</Text>
             </View>
-            <Text style={styles.dot}>·</Text>
+            <Text style={[styles.dot, { color: C.textTertiary }]}>·</Text>
             <View style={styles.group}>
-              <Text style={[styles.letter, { color: colors.carbs }]}>C</Text>
+              <Text style={[styles.letter, { color: C.carbs }]}>C</Text>
               <Text style={[styles.val, { color: C.textPrimary }]}>{carbs}</Text>
             </View>
-            <Text style={styles.dot}>·</Text>
+            <Text style={[styles.dot, { color: C.textTertiary }]}>·</Text>
             <View style={styles.group}>
-              <Text style={[styles.letter, { color: colors.protein }]}>P</Text>
+              <Text style={[styles.letter, { color: C.protein }]}>P</Text>
               <Text style={[styles.val, { color: C.textPrimary }]}>{prot}</Text>
             </View>
-            <Text style={styles.dot}>·</Text>
+            <Text style={[styles.dot, { color: C.textTertiary }]}>·</Text>
             <View style={styles.group}>
-              <Text style={[styles.letter, { color: colors.fat }]}>F</Text>
+              <Text style={[styles.letter, { color: C.fat }]}>F</Text>
               <Text style={[styles.val, { color: C.textPrimary }]}>{fat}</Text>
             </View>
             <Text style={[styles.chevron, goalsExpanded && styles.chevronUp]}>⌃</Text>
@@ -139,7 +140,7 @@ export function ActionBar({
         <ActionBtn
           sfName={isListening ? "mic.fill" : "mic"}
           fallback="🎙"
-          color={isListening ? colors.accentRed : colors.accentBlue}
+          color={isListening ? C.accentRed : C.accentBlue}
           onPress={onToggleMic}
           label={isListening ? "Parar gravação" : "Gravar voz"}
           active={isListening}
@@ -147,23 +148,31 @@ export function ActionBar({
         <ActionBtn
           sfName="camera"
           fallback="📷"
-          color={colors.accentPink}
+          color={C.accentPink}
           onPress={onOpenCamera}
           label="Câmera"
         />
         <ActionBtn
           sfName="plus"
           fallback="+"
-          color={colors.accentYellow}
+          color={C.accentYellow}
           onPress={onAddSavedMeal}
           label="Adicionar refeição salva"
         />
         <ActionBtn
           sfName="keyboard.chevron.compact.down"
           fallback="⌨"
-          color={colors.textSecondary}
+          color={C.textSecondary}
           onPress={onDismissKeyboard}
           label="Fechar teclado"
+        />
+        {/* Primary action: log the current entry */}
+        <ActionBtn
+          sfName="checkmark"
+          fallback="✓"
+          color={C.accentGreen}
+          onPress={onLogEntry}
+          label="Registrar"
         />
       </View>
     </View>
@@ -190,11 +199,10 @@ const styles = StyleSheet.create({
   group: { flexDirection: "row", alignItems: "center", gap: 4 },
   flame: { fontSize: 16 },
   letter: { fontSize: 15, fontWeight: "600", letterSpacing: -0.2 },
-  val: { fontSize: 15, fontWeight: "600", color: colors.textPrimary, letterSpacing: -0.3 },
-  dot: { fontSize: 14, color: colors.systemGray3 },
+  val: { fontSize: 15, fontWeight: "600", letterSpacing: -0.3 },
+  dot: { fontSize: 14 },
   chevron: {
     fontSize: 13,
-    color: colors.systemGray2,
     marginLeft: spacing.xs,
     transform: [{ rotate: "180deg" }],
   },
@@ -220,7 +228,7 @@ const styles = StyleSheet.create({
     overflow: "hidden",
     gap: spacing.xs + 1,
     borderWidth: StyleSheet.hairlineWidth,
-    borderColor: colors.glassBorder,
+    borderColor: "rgba(255,255,255,0.12)",
     shadowColor: "#000",
     shadowOffset: { width: 0, height: 2 },
     shadowOpacity: 0.22,
@@ -231,7 +239,6 @@ const styles = StyleSheet.create({
   capsuleVal: {
     fontSize: 14,
     fontWeight: "700",
-    color: colors.textPrimary,
     letterSpacing: -0.3,
     lineHeight: 20,
   },

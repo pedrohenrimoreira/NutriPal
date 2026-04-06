@@ -8,7 +8,7 @@ import React from "react";
 import { View, Text, StyleSheet } from "react-native";
 import { GlassView, isLiquidGlassAvailable } from "expo-glass-effect";
 import { useThemeStore } from "../../store/themeStore";
-import { colors, spacing, radius, typography } from "../../theme";
+import { spacing, radius, typography } from "../../theme";
 
 const DEFAULT_GOALS = {
   calories: 2729,
@@ -91,22 +91,22 @@ export function GoalsPanel({ totals }) {
         right={`${cal} / ${DEFAULT_GOALS.calories}`}
         C={C}
       />
-      <ProgressBar pct={calPct} color={colors.accentOrange} />
+      <ProgressBar pct={calPct} color={C.accentOrange} />
 
       <View style={styles.rowGap} />
       <GoalRow icon="🚶" label="Burned" right="0" C={C} />
-      <ProgressBar pct={0} color={colors.accentGreen} />
+      <ProgressBar pct={0} color={C.accentGreen} />
 
       <View style={styles.circleRow}>
-        <MacroCircle value={carbs} label="Carbs"   color={colors.carbs}   C={C} />
-        <MacroCircle value={prot}  label="Protein" color={colors.protein} C={C} />
-        <MacroCircle value={fat}   label="Fat"     color={colors.fat}     C={C} />
+        <MacroCircle value={carbs} label="Carbs"   color={C.carbs}   C={C} />
+        <MacroCircle value={prot}  label="Protein" color={C.protein} C={C} />
+        <MacroCircle value={fat}   label="Fat"     color={C.fat}     C={C} />
       </View>
 
       <View style={styles.circleRow}>
-        <MacroCircle value={0} label="Sugar"  color={colors.accentPink}  C={C} />
-        <MacroCircle value={0} label="Fiber"  color={colors.accentGreen} C={C} />
-        <MacroCircle value={0} label="Sodium" color={colors.accentBlue}  C={C} />
+        <MacroCircle value={0} label="Sugar"  color={C.accentPink}  C={C} />
+        <MacroCircle value={0} label="Fiber"  color={C.accentGreen} C={C} />
+        <MacroCircle value={0} label="Sodium" color={C.accentBlue}  C={C} />
       </View>
     </GlassView>
   );
@@ -145,7 +145,7 @@ const styles = StyleSheet.create({
   },
   goalIcon:  { fontSize: 16 },
   goalLabel: { ...typography.subhead },
-  goalRight: { ...typography.footnote, color: colors.systemGray },
+  goalRight: { ...typography.footnote },
   rowGap:    { height: spacing.md },
 
   track: {
@@ -175,10 +175,8 @@ const styles = StyleSheet.create({
   circleVal: {
     fontSize: 16,
     fontWeight: "600",
-    color: colors.textPrimary,
   },
   circleLabel: {
     ...typography.caption1,
-    color: colors.systemGray,
   },
 });

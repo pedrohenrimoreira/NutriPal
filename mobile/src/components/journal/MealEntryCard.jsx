@@ -19,7 +19,7 @@ import {
 } from "react-native";
 import { Image } from "expo-image";
 import { useThemeStore } from "../../store/themeStore";
-import { colors, spacing, radius, typography } from "../../theme";
+import { spacing, radius, typography } from "../../theme";
 
 function resolveImageAsset(entry) {
   if (entry?.imageAsset?.uri) return entry.imageAsset;
@@ -191,7 +191,6 @@ const styles = StyleSheet.create({
     paddingTop: spacing.lg,
     paddingBottom: spacing.lg,
     borderBottomWidth: StyleSheet.hairlineWidth,
-    borderBottomColor: "rgba(255,255,255,0.06)",
   },
 
   meta: {
@@ -203,7 +202,6 @@ const styles = StyleSheet.create({
   time: {
     fontSize: 12,
     fontWeight: "500",
-    color: colors.systemGray2,
     letterSpacing: 0.3,
   },
   metaRight: {
@@ -213,20 +211,17 @@ const styles = StyleSheet.create({
   },
   processing: {
     fontSize: 12,
-    color: colors.systemGray3,
     fontStyle: "italic",
     letterSpacing: 0.5,
   },
   kcal: {
     fontSize: 13,
     fontWeight: "600",
-    color: colors.systemGray,
     letterSpacing: -0.1,
   },
 
   body: {
     ...typography.body,
-    color: "rgba(255,255,255,0.92)",
     lineHeight: 26,
     letterSpacing: -0.3,
   },
@@ -242,11 +237,9 @@ const styles = StyleSheet.create({
     width: "100%",
     height: 220,
     borderRadius: radius.lg,
-    backgroundColor: colors.bgTertiary,
   },
   imageCaption: {
     fontSize: 12,
-    color: colors.systemGray2,
     marginTop: spacing.xs,
     letterSpacing: -0.1,
   },
@@ -258,15 +251,12 @@ const styles = StyleSheet.create({
   },
   breakdownItem: {
     fontSize: 13,
-    color: colors.systemGray2,
     lineHeight: 19,
     letterSpacing: -0.1,
   },
   breakdownDot: {
-    color: colors.systemGray3,
   },
   breakdownCal: {
-    color: colors.systemGray3,
     fontWeight: "400",
   },
 

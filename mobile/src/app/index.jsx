@@ -90,15 +90,16 @@ function IconBadge({ color, icon, sfName }) {
 }
 
 function NavRow({ badge, badgeColor, sfName, label, sublabel, value, onPress, isLast }) {
+  const C = useThemeStore((s) => s.colors);
   const content = (
     <View style={[sS.row, isLast && sS.rowLast]}>
       {badge ? <IconBadge color={badgeColor} icon={badge} sfName={sfName} /> : null}
       <View style={sS.rowBody}>
-        <Text style={sS.rowLabel}>{label}</Text>
-        {sublabel ? <Text style={sS.rowSub}>{sublabel}</Text> : null}
+        <Text style={[sS.rowLabel, { color: C.textPrimary }]}>{label}</Text>
+        {sublabel ? <Text style={[sS.rowSub, { color: C.textSecondary }]}>{sublabel}</Text> : null}
       </View>
-      {value ? <Text style={sS.rowVal}>{value}</Text> : null}
-      {onPress ? <Text style={sS.chevron}>›</Text> : null}
+      {value ? <Text style={[sS.rowVal, { color: C.textSecondary }]}>{value}</Text> : null}
+      {onPress ? <Text style={[sS.chevron, { color: C.textTertiary }]}>›</Text> : null}
     </View>
   );
   return onPress ? (
@@ -107,19 +108,20 @@ function NavRow({ badge, badgeColor, sfName, label, sublabel, value, onPress, is
 }
 
 function ToggleRow({ badge, badgeColor, sfName, label, sublabel, value, onToggle, isLast }) {
+  const C = useThemeStore((s) => s.colors);
   return (
     <View style={[sS.row, isLast && sS.rowLast]}>
       {badge ? <IconBadge color={badgeColor} icon={badge} sfName={sfName} /> : null}
       <View style={sS.rowBody}>
-        <Text style={sS.rowLabel}>{label}</Text>
-        {sublabel ? <Text style={sS.rowSub}>{sublabel}</Text> : null}
+        <Text style={[sS.rowLabel, { color: C.textPrimary }]}>{label}</Text>
+        {sublabel ? <Text style={[sS.rowSub, { color: C.textSecondary }]}>{sublabel}</Text> : null}
       </View>
       <GlassContainer>
         <GlassView
           isInteractive={false}
           style={[
             sS.toggleWrapper,
-            !isLiquidGlassAvailable() && { backgroundColor: "rgba(120,120,128,0.32)" },
+            value && { backgroundColor: C.accentGreen },
           ]}
         >
           <Switch
@@ -137,6 +139,7 @@ function ToggleRow({ badge, badgeColor, sfName, label, sublabel, value, onToggle
 
 // Dark / Light mode segmented row — colorMode passed as prop from Index
 function AppearanceRow({ colorMode, onToggle }) {
+  const C = useThemeStore((s) => s.colors);
   const isDark = colorMode === "dark";
   return (
     <View style={sS.row}>
@@ -146,8 +149,8 @@ function AppearanceRow({ colorMode, onToggle }) {
         sfName={isDark ? "moon.fill" : "sun.max.fill"}
       />
       <View style={sS.rowBody}>
-        <Text style={sS.rowLabel}>Appearance</Text>
-        <Text style={sS.rowSub}>{isDark ? "Dark" : "Light"}</Text>
+        <Text style={[sS.rowLabel, { color: C.textPrimary }]}>Appearance</Text>
+        <Text style={[sS.rowSub, { color: C.textSecondary }]}>{isDark ? "Dark" : "Light"}</Text>
       </View>
       <View style={sS.segmentedControl}>
         <TouchableOpacity
@@ -170,10 +173,11 @@ function AppearanceRow({ colorMode, onToggle }) {
 }
 
 function Card({ children }) {
+  const C = useThemeStore((s) => s.colors);
   return (
     <GlassView
       isInteractive={false}
-      style={[sS.card, glass("rgba(255,255,255,0.07)")]}
+      style={[sS.card, glass(C.glassBg)]}
     >
       {children}
     </GlassView>
@@ -181,7 +185,8 @@ function Card({ children }) {
 }
 
 function SectionTitle({ title }) {
-  return <Text style={sS.sectionTitle}>{title}</Text>;
+  const C = useThemeStore((s) => s.colors);
+  return <Text style={[sS.sectionTitle, { color: C.textSecondary }]}>{title}</Text>;
 }
 
 /* ── main screen ─────────────────────────────────────────────────────────── */
@@ -605,26 +610,26 @@ export default function Index() {
     const marks = {
       [selectedDate]: {
         selected: true,
-        selectedColor: colors.accentGreen,
+        selectedColor: C.accentGreen,
         selectedTextColor: "#000",
       },
     };
     if (selectedDate !== todayStr) {
       marks[todayStr] = {
         marked: true,
-        dotColor: colors.accentPurple,
+        dotColor: C.accentPurple,
         customStyles: {
           container: {
             borderWidth: 2,
-            borderColor: colors.accentPurple,
+            borderColor: C.accentPurple,
             borderRadius: 18,
           },
-          text: { color: colors.accentPurple, fontWeight: "600" },
+          text: { color: C.accentPurple, fontWeight: "600" },
         },
       };
     }
     return marks;
-  }, [selectedDate, todayStr]);
+  }, [selectedDate, todayStr, C]);
 
   /* render ---------------------------------------------------------------- */
   return (
@@ -642,7 +647,7 @@ export default function Index() {
         <View style={styles.headerCenter}>
           <TouchableOpacity onPress={openCalendar} activeOpacity={0.7}>
             <GlassView isInteractive style={[styles.datePill, glass("rgba(255,255,255,0.10)")]}>
-              <Text style={styles.dateLabel}>{dateLabel}</Text>
+              <Text style={[styles.dateLabel, { color: C.textPrimary }]}>{dateLabel}</Text>
             </GlassView>
           </TouchableOpacity>
         </View>
@@ -652,7 +657,7 @@ export default function Index() {
           <TouchableOpacity onPress={openSettings} activeOpacity={0.7}>
             <GlassView isInteractive style={[styles.rightPill, glass("rgba(255,255,255,0.10)")]}>
               <Text style={styles.streakText}>🔥</Text>
-              <Text style={styles.streakCount}>1</Text>
+              <Text style={[styles.streakCount, { color: C.textPrimary }]}>1</Text>
               <View style={styles.pillDivider} />
               {isThinking ? (
                 <Text style={styles.thinkingText}>Thinking...</Text>
@@ -661,10 +666,10 @@ export default function Index() {
                   name="gear"
                   style={styles.gearSymbol}
                   type="monochrome"
-                  tintColor={colors.textSecondary}
+                  tintColor={C.textSecondary}
                 />
               ) : (
-                <Text style={styles.gearIcon}>⚙</Text>
+                <Text style={[styles.gearIcon, { color: C.textSecondary }]}>⚙</Text>
               )}
             </GlassView>
           </TouchableOpacity>
@@ -722,25 +727,45 @@ export default function Index() {
 
                 {/* Inactive day empty state */}
                 {!isActive && dayEntries.length === 0 && (
-                  <Text style={styles.placeholder}>Sem registros neste dia.</Text>
+                  <Text style={[styles.placeholder, { color: C.textTertiary }]}>Sem registros neste dia.</Text>
                 )}
 
                 {/* ── Input block — always visible on active day ────────── */}
                 {isActive && (
-                  <TextInput
-                    ref={inputRef}
-                    value={text}
-                    onChangeText={handleTextChange}
-                    placeholder={
-                      dayEntries.length === 0
-                        ? "O que você comeu?..."
-                        : "Continuar a anotar..."
-                    }
-                    placeholderTextColor={colors.systemGray3}
-                    style={[styles.inlineInput, { color: C.textPrimary }]}
-                    multiline
-                    blurOnSubmit={false}
-                  />
+                  isEditing ? (
+                    <TextInput
+                      ref={inputRef}
+                      value={text}
+                      onChangeText={handleTextChange}
+                      placeholder={
+                        dayEntries.length === 0
+                          ? "O que você comeu?..."
+                          : "Continuar a anotar..."
+                      }
+                      placeholderTextColor={C.textTertiary}
+                      style={[styles.inlineInput, { color: C.textPrimary }]}
+                      multiline
+                      autoFocus
+                      blurOnSubmit={false}
+                    />
+                  ) : (
+                    <TouchableOpacity
+                      onPress={handleStartEditing}
+                      style={styles.writingPromptArea}
+                      activeOpacity={0.5}
+                    >
+                      <Text
+                        style={[
+                          dayEntries.length === 0 ? styles.placeholder : styles.continuePrompt,
+                          { color: C.textTertiary },
+                        ]}
+                      >
+                        {dayEntries.length === 0
+                          ? "O que você comeu?..."
+                          : "Continuar a anotar..."}
+                      </Text>
+                    </TouchableOpacity>
+                  )
                 )}
               </ScrollView>
             );
@@ -785,6 +810,7 @@ export default function Index() {
             onOpenCamera={handleOpenCamera}
             onAddSavedMeal={handleAddSavedMeal}
             onDismissKeyboard={handleDismissKeyboard}
+            onLogEntry={handleSubmit}
           />
         </View>
       </KeyboardAvoidingView>
@@ -814,12 +840,12 @@ export default function Index() {
                   <SymbolView
                     name="doc.text.viewfinder"
                     style={styles.cameraMenuSymbol}
-                    tintColor={colors.accentBlue}
+                    tintColor={C.accentBlue}
                   />
                 ) : (
                   <Text style={[styles.cameraMenuSymbol, { fontSize: 18, textAlign: "center" }]}>📄</Text>
                 )}
-                <Text style={styles.cameraMenuLabel}>Scan Menu</Text>
+                <Text style={[styles.cameraMenuLabel, { color: C.textPrimary }]}>Scan Menu</Text>
               </TouchableOpacity>
 
               <View style={styles.cameraMenuSep} />
@@ -833,12 +859,12 @@ export default function Index() {
                   <SymbolView
                     name="photo.on.rectangle"
                     style={styles.cameraMenuSymbol}
-                    tintColor={colors.accentGreen}
+                    tintColor={C.accentGreen}
                   />
                 ) : (
                   <Text style={[styles.cameraMenuSymbol, { fontSize: 18, textAlign: "center" }]}>🖼️</Text>
                 )}
-                <Text style={styles.cameraMenuLabel}>Choose from Library</Text>
+                <Text style={[styles.cameraMenuLabel, { color: C.textPrimary }]}>Choose from Library</Text>
               </TouchableOpacity>
 
               <View style={styles.cameraMenuSep} />
@@ -852,12 +878,12 @@ export default function Index() {
                   <SymbolView
                     name="camera"
                     style={styles.cameraMenuSymbol}
-                    tintColor={colors.accentPink}
+                    tintColor={C.accentPink}
                   />
                 ) : (
                   <Text style={[styles.cameraMenuSymbol, { fontSize: 18, textAlign: "center" }]}>📷</Text>
                 )}
-                <Text style={styles.cameraMenuLabel}>Take Photo</Text>
+                <Text style={[styles.cameraMenuLabel, { color: C.textPrimary }]}>Take Photo</Text>
               </TouchableOpacity>
             </GlassView>
           </View>
@@ -870,8 +896,8 @@ export default function Index() {
         index={-1}
         snapPoints={["65%"]}
         enablePanDownToClose
-        backgroundStyle={styles.sheetBg}
-        handleIndicatorStyle={styles.sheetHandle}
+        backgroundStyle={{ backgroundColor: C.bgSecondary, borderTopLeftRadius: radius.xl, borderTopRightRadius: radius.xl }}
+        handleIndicatorStyle={{ backgroundColor: C.systemGray3 }}
       >
         <BottomSheetView style={styles.calSheet}>
           {/* Today | Apr 2026 | Done */}
@@ -880,11 +906,11 @@ export default function Index() {
               onPress={() => { setDate(todayStr); closeCalendar(); }}
               activeOpacity={0.7}
             >
-              <Text style={styles.calAction}>Today</Text>
+              <Text style={[styles.calAction, { color: C.accentBlue }]}>Today</Text>
             </TouchableOpacity>
-            <Text style={styles.calMonth}>{monthYearLabel}</Text>
+            <Text style={[styles.calMonth, { color: C.textPrimary }]}>{monthYearLabel}</Text>
             <TouchableOpacity onPress={closeCalendar} activeOpacity={0.7}>
-              <Text style={styles.calAction}>Done</Text>
+              <Text style={[styles.calAction, { color: C.accentBlue }]}>Done</Text>
             </TouchableOpacity>
           </View>
 
@@ -895,16 +921,16 @@ export default function Index() {
             markingType="custom"
             hideArrows={false}
             renderArrow={(dir) => (
-              <Text style={styles.calArrow}>{dir === "left" ? "‹" : "›"}</Text>
+              <Text style={[styles.calArrow, { color: C.textSecondary }]}>{dir === "left" ? "‹" : "›"}</Text>
             )}
             theme={{
               calendarBackground: "transparent",
-              textSectionTitleColor: colors.systemGray2,
-              selectedDayBackgroundColor: colors.accentGreen,
+              textSectionTitleColor: C.systemGray2,
+              selectedDayBackgroundColor: C.accentGreen,
               selectedDayTextColor: "#000",
-              todayTextColor: colors.accentPurple,
-              dayTextColor: colors.textPrimary,
-              textDisabledColor: colors.systemGray3,
+              todayTextColor: C.accentPurple,
+              dayTextColor: C.textPrimary,
+              textDisabledColor: C.textTertiary,
               monthTextColor: "transparent",
               textMonthFontSize: 0,
               textDayFontSize: 16,
@@ -925,17 +951,17 @@ export default function Index() {
         index={-1}
         snapPoints={["90%"]}
         enablePanDownToClose
-        backgroundStyle={styles.sheetBg}
-        handleIndicatorStyle={styles.sheetHandle}
+        backgroundStyle={{ backgroundColor: C.bgSecondary, borderTopLeftRadius: radius.xl, borderTopRightRadius: radius.xl }}
+        handleIndicatorStyle={{ backgroundColor: C.systemGray3 }}
       >
           <BottomSheetScrollView
             contentContainerStyle={[styles.settingsContent, { paddingBottom: insets.bottom + 40 }]}
           >
             {/* Header */}
             <View style={sS.header}>
-              <Text style={sS.title}>Settings</Text>
+              <Text style={[sS.title, { color: C.textPrimary }]}>Settings</Text>
               <TouchableOpacity onPress={closeSettings} activeOpacity={0.7} style={sS.closeBtn}>
-                <Text style={sS.closeBtnText}>✕</Text>
+                <Text style={[sS.closeBtnText, { color: C.textSecondary }]}>✕</Text>
               </TouchableOpacity>
             </View>
 
@@ -1067,15 +1093,15 @@ export default function Index() {
                 activeOpacity={0.8}
                 style={styles.managerHeaderBtn}
               >
-                <Text style={styles.managerHeaderBtnText}>‹</Text>
+                <Text style={[styles.managerHeaderBtnText, { color: C.textSecondary }]}>‹</Text>
               </TouchableOpacity>
-              <Text style={styles.managerTitle}>Saved Meals</Text>
+              <Text style={[styles.managerTitle, { color: C.textPrimary }]}>Saved Meals</Text>
               <TouchableOpacity
                 onPress={() => setSettingsView("main")}
                 activeOpacity={0.8}
                 style={styles.managerHeaderBtn}
               >
-                <Text style={styles.managerHeaderBtnText}>✕</Text>
+                <Text style={[styles.managerHeaderBtnText, { color: C.textSecondary }]}>✕</Text>
               </TouchableOpacity>
             </View>
 
@@ -1086,8 +1112,8 @@ export default function Index() {
             >
               {savedMeals.length === 0 ? (
                 <View style={styles.emptyState}>
-                  <Text style={styles.emptyTitle}>No saved meals yet</Text>
-                  <Text style={styles.emptySub}>
+                  <Text style={[styles.emptyTitle, { color: C.textPrimary }]}>No saved meals yet</Text>
+                  <Text style={[styles.emptySub, { color: C.textSecondary }]}>
                     Digite uma refeicao no chat e toque no + para salva-la com macros.
                   </Text>
                 </View>
@@ -1095,7 +1121,7 @@ export default function Index() {
                 savedMeals.map((meal) => (
                   <GlassView isInteractive key={meal.id} style={[styles.savedMealCard, glass("rgba(255,255,255,0.06)")]}>
                     <View style={styles.savedMealHeader}>
-                      <Text style={styles.savedMealName}>{meal.name}</Text>
+                      <Text style={[styles.savedMealName, { color: C.textPrimary }]}>{meal.name}</Text>
                       <TouchableOpacity
                         onPress={() => handleDeleteSavedMeal(meal)}
                         activeOpacity={0.8}
@@ -1104,11 +1130,11 @@ export default function Index() {
                         <Text style={styles.deleteBtnText}>✕</Text>
                       </TouchableOpacity>
                     </View>
-                    <Text style={styles.savedMealMacros}>
+                    <Text style={[styles.savedMealMacros, { color: C.textSecondary }]}>
                       🔥 {Math.round(meal.calories)} cal · P {Math.round(meal.protein_g)}g ·
                       {" "}C {Math.round(meal.carbs_g)}g · F {Math.round(meal.fat_g)}g
                     </Text>
-                    <Text style={styles.savedMealItems}>{meal.items}</Text>
+                    <Text style={[styles.savedMealItems, { color: C.textTertiary }]}>{meal.items}</Text>
                   </GlassView>
                 ))
               )}
@@ -1128,8 +1154,8 @@ export default function Index() {
       >
         <View style={styles.modalBackdrop}>
           <GlassView isInteractive={false} style={[styles.modalCard, glass("rgba(255,255,255,0.09)")]}>
-            <Text style={styles.modalTitle}>Save meal</Text>
-            <Text style={styles.modalDescription}>
+            <Text style={[styles.modalTitle, { color: C.textPrimary }]}>Save meal</Text>
+            <Text style={[styles.modalDescription, { color: C.textSecondary }]}>
               Escolha o nome que o usuario vai digitar depois no chat.
             </Text>
 
@@ -1137,13 +1163,13 @@ export default function Index() {
               value={savedMealName}
               onChangeText={setSavedMealName}
               placeholder="Ex.: cafe da manha padrao"
-              placeholderTextColor={colors.systemGray3}
-              style={styles.modalInput}
+              placeholderTextColor={C.textTertiary}
+              style={[styles.modalInput, { color: C.textPrimary }]}
               autoFocus
             />
 
             {pendingSavedMeal ? (
-              <Text style={styles.modalMacros}>
+              <Text style={[styles.modalMacros, { color: C.textSecondary }]}>
                 🔥 {Math.round(pendingSavedMeal.totals.calories)} cal · P{" "}
                 {Math.round(pendingSavedMeal.totals.protein_g)}g · C{" "}
                 {Math.round(pendingSavedMeal.totals.carbs_g)}g · F{" "}
@@ -1160,12 +1186,12 @@ export default function Index() {
                 activeOpacity={0.8}
                 style={styles.modalSecondaryBtn}
               >
-                <Text style={styles.modalSecondaryText}>Cancelar</Text>
+                <Text style={[styles.modalSecondaryText, { color: C.textSecondary }]}>Cancelar</Text>
               </TouchableOpacity>
               <TouchableOpacity
                 onPress={handleConfirmSaveMeal}
                 activeOpacity={0.8}
-                style={styles.modalPrimaryBtn}
+                style={[styles.modalPrimaryBtn, { backgroundColor: C.accentGreen }]}
               >
                 <Text style={styles.modalPrimaryText}>Salvar</Text>
               </TouchableOpacity>
