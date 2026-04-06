@@ -222,6 +222,7 @@ export default function Index() {
   const handleToggleAppearance = useCallback((mode) => setColorMode(mode), [setColorMode]);
 
   const [isEditing, setIsEditing] = useState(false);
+  const [cardIsEditing, setCardIsEditing] = useState(false);
   const [text, setText] = useState("");
   const textRef = useRef("");
   const [keyboardVisible, setKeyboardVisible] = useState(false);
@@ -293,6 +294,7 @@ export default function Index() {
       if (!isListeningRef.current) {
         setIsEditing(false);
       }
+      setCardIsEditing(false);
     });
 
     return () => {
@@ -410,6 +412,10 @@ export default function Index() {
     Keyboard.dismiss();
     setIsEditing(false);
   }, [cancelDebounce, isListening, stopListening]);
+
+  const handleCardEditingChange = useCallback((val) => {
+    setCardIsEditing(val);
+  }, []);
 
   const handleToggleMic = useCallback(async () => {
     if (isListening) {
@@ -722,7 +728,7 @@ export default function Index() {
 
                 {/* ── Entries always rendered (notebook page) ──────────── */}
                 {dayEntries.map((entry) => (
-                  <MealEntryCard key={entry.id} entry={entry} onDelete={isActive ? removeEntry : undefined} onEdit={isActive ? editEntry : undefined} />
+                  <MealEntryCard key={entry.id} entry={entry} onDelete={isActive ? removeEntry : undefined} onEdit={isActive ? editEntry : undefined} onEditingChange={isActive ? handleCardEditingChange : undefined} />
                 ))}
 
                 {/* Inactive day empty state */}
@@ -773,46 +779,51 @@ export default function Index() {
         </ScrollView>
 
         {/* ── Bottom area: GoalsPanel + ActionBar pinned to bottom ─────── */}
-        <View style={[
-          styles.bottomContainer,
-          {
-            bottom: keyboardVisible
-              ? keyboardHeight
-              : insets.bottom + WEB_BOTTOM_INSET,
-            paddingBottom: keyboardVisible ? 0 : undefined,
-          },
-        ]}>
-          <AnimatePresence>
-            {goalsExpanded && !keyboardVisible && (
-              <MotiView
-                from={{ opacity: 0, translateY: 20, scale: 0.97 }}
-                animate={{ opacity: 1, translateY: 0, scale: 1 }}
-                exit={{ opacity: 0, translateY: 12, scale: 0.98 }}
-                transition={{
-                  type: "spring",
-                  damping: 20,
-                  stiffness: 180,
-                  mass: 0.8,
-                }}
-              >
-                <GoalsPanel totals={totals} />
-              </MotiView>
-            )}
-          </AnimatePresence>
+        {(() => {
+          const anyEditing = isEditing || cardIsEditing;
+          return (
+            <View style={[
+              styles.bottomContainer,
+              {
+                bottom: keyboardVisible && anyEditing
+                  ? keyboardHeight
+                  : insets.bottom + WEB_BOTTOM_INSET,
+                paddingBottom: keyboardVisible && anyEditing ? 0 : undefined,
+              },
+            ]}>
+              <AnimatePresence>
+                {goalsExpanded && !(keyboardVisible && anyEditing) && (
+                  <MotiView
+                    from={{ opacity: 0, translateY: 20, scale: 0.97 }}
+                    animate={{ opacity: 1, translateY: 0, scale: 1 }}
+                    exit={{ opacity: 0, translateY: 12, scale: 0.98 }}
+                    transition={{
+                      type: "spring",
+                      damping: 20,
+                      stiffness: 180,
+                      mass: 0.8,
+                    }}
+                  >
+                    <GoalsPanel totals={totals} />
+                  </MotiView>
+                )}
+              </AnimatePresence>
 
-          <ActionBar
-            totals={totals}
-            isEditing={isEditing}
-            isListening={isListening}
-            goalsExpanded={goalsExpanded}
-            onToggleGoals={handleToggleGoals}
-            onToggleMic={handleToggleMic}
-            onOpenCamera={handleOpenCamera}
-            onAddSavedMeal={handleAddSavedMeal}
-            onDismissKeyboard={handleDismissKeyboard}
-            onLogEntry={handleSubmit}
-          />
-        </View>
+              <ActionBar
+                totals={totals}
+                isEditing={anyEditing}
+                isListening={isListening}
+                goalsExpanded={goalsExpanded}
+                onToggleGoals={handleToggleGoals}
+                onToggleMic={handleToggleMic}
+                onOpenCamera={handleOpenCamera}
+                onAddSavedMeal={handleAddSavedMeal}
+                onDismissKeyboard={handleDismissKeyboard}
+                onLogEntry={handleSubmit}
+              />
+            </View>
+          );
+        })()}
       </KeyboardAvoidingView>
 
       {/* ── Camera context menu ────────────────────────────────────────── */}

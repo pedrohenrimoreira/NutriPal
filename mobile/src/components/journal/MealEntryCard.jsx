@@ -40,13 +40,18 @@ function buildImageCaption(imageAsset) {
   return parts.join(" · ");
 }
 
-export function MealEntryCard({ entry, onDelete, onEdit }) {
+export function MealEntryCard({ entry, onDelete, onEdit, onEditingChange }) {
   const C = useThemeStore((s) => s.colors);
 
   const [isEditing, setIsEditing] = useState(false);
   const [editText, setEditText] = useState(entry.rawText ?? "");
   const debounceRef = useRef(null);
   const lastCommittedRef = useRef(entry.rawText ?? "");
+
+  const setEditing = useCallback((val) => {
+    setIsEditing(val);
+    onEditingChange?.(val);
+  }, [onEditingChange]);
 
   const time = new Date(entry.createdAt).toLocaleTimeString("pt-BR", {
     hour: "2-digit",
@@ -61,11 +66,19 @@ export function MealEntryCard({ entry, onDelete, onEdit }) {
     !entry.isProcessing &&
     entry.parsedResult?.items?.length > 0;
 
+  const isEditingRef = useRef(false);
+  useEffect(() => {
+    isEditingRef.current = isEditing;
+  }, [isEditing]);
+
   useEffect(() => {
     return () => {
       if (debounceRef.current) clearTimeout(debounceRef.current);
+      if (isEditingRef.current) {
+        onEditingChange?.(false);
+      }
     };
-  }, []);
+  }, [onEditingChange]);
 
   const commitEdit = useCallback(
     (text) => {
@@ -82,8 +95,8 @@ export function MealEntryCard({ entry, onDelete, onEdit }) {
     if (imageAsset?.uri) return;
     setEditText(entry.rawText ?? "");
     lastCommittedRef.current = entry.rawText ?? "";
-    setIsEditing(true);
-  }, [entry.rawText, imageAsset]);
+    setEditing(true);
+  }, [entry.rawText, imageAsset, setEditing]);
 
   const handleChangeText = useCallback(
     (value) => {
@@ -91,11 +104,11 @@ export function MealEntryCard({ entry, onDelete, onEdit }) {
       if (debounceRef.current) clearTimeout(debounceRef.current);
       debounceRef.current = setTimeout(() => {
         debounceRef.current = null;
-        setIsEditing(false);
+        setEditing(false);
         commitEdit(value);
       }, 1000);
     },
-    [commitEdit],
+    [commitEdit, setEditing],
   );
 
   const handleBlur = useCallback(() => {
@@ -103,9 +116,9 @@ export function MealEntryCard({ entry, onDelete, onEdit }) {
       clearTimeout(debounceRef.current);
       debounceRef.current = null;
     }
-    setIsEditing(false);
+    setEditing(false);
     commitEdit(editText);
-  }, [editText, commitEdit]);
+  }, [editText, commitEdit, setEditing]);
 
   return (
     <View style={[styles.entry, { borderBottomColor: C.separator }]}>
