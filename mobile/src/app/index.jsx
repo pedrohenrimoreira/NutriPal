@@ -10,7 +10,7 @@ import React, {
   useState, useRef, useCallback, useMemo, useEffect,
 } from "react";
 import {
-  View, Text, TextInput, TouchableOpacity, ScrollView,
+  View, Text, TextInput, TouchableOpacity, ScrollView, FlatList,
   KeyboardAvoidingView, Platform, StyleSheet, Keyboard, LayoutAnimation,
   useWindowDimensions, Modal, Alert, Appearance, Switch,
 } from "react-native";
@@ -305,8 +305,8 @@ export default function Index() {
 
   /* re-center swiper whenever selectedDate changes (swipe or calendar pick) */
   useEffect(() => {
-    swipeRef.current?.scrollTo({ x: width, animated: false });
-  }, [selectedDate, width]);
+    swipeRef.current?.scrollToIndex({ index: 1, animated: false });
+  }, [selectedDate]);
 
   useEffect(() => {
     if (!transcript) return;
@@ -716,7 +716,7 @@ export default function Index() {
         keyboardVerticalOffset={0}
       >
         {/* ── 3-page horizontal day swiper ────────────────────────────── */}
-        <ScrollView
+        <FlatList
           ref={swipeRef}
           horizontal
           pagingEnabled
@@ -726,14 +726,15 @@ export default function Index() {
           onMomentumScrollEnd={handleDaySwipe}
           keyboardShouldPersistTaps="handled"
           style={styles.flex}
-          contentOffset={{ x: width, y: 0 }}
-        >
-          {[prevDate, selectedDate, nextDate].map((date, idx) => {
+          data={[prevDate, selectedDate, nextDate]}
+          keyExtractor={(date) => date}
+          initialScrollIndex={1}
+          getItemLayout={(_, index) => ({ length: width, offset: width * index, index })}
+          renderItem={({ item: date, index: idx }) => {
             const isActive = idx === 1;
             const dayEntries = isActive ? entries : getEntriesForDate(date);
             return (
               <ScrollView
-                key={date}
                 ref={isActive ? scrollRef : null}
                 style={{ width }}
                 contentContainerStyle={styles.scrollContent}
@@ -760,7 +761,7 @@ export default function Index() {
 
                 {/* Inactive day empty state */}
                 {!isActive && dayEntries.length === 0 && (
-                  <Text style={[styles.placeholder, { color: C.textTertiary }]}>Sem registros neste dia.</Text>
+                  <Text style={[styles.placeholder, { color: C.textSecondary }]}>Sem registros neste dia.</Text>
                 )}
 
                 {/* ── Input block — always visible on active day ────────── */}
@@ -807,7 +808,7 @@ export default function Index() {
                       <Text
                         style={[
                           dayEntries.length === 0 ? styles.placeholder : styles.continuePrompt,
-                          { color: C.textTertiary },
+                          { color: C.textSecondary },
                         ]}
                       >
                         {dayEntries.length === 0
@@ -819,8 +820,8 @@ export default function Index() {
                 )}
               </ScrollView>
             );
-          })}
-        </ScrollView>
+          }}
+        />
 
         {/* ── Bottom area: GoalsPanel + ActionBar pinned to bottom ─────── */}
         {(() => {
