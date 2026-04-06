@@ -189,6 +189,7 @@ export default function Index() {
     addTextEntry,
     addImageEntry,
     removeEntry,
+    editEntry,
   } = useJournalStore();
   const totals = useDailyTotals(entries);
   const savedMeals = useSettingsStore((state) => state.savedMeals);
@@ -711,7 +712,7 @@ export default function Index() {
 
                 {/* ── Entries always rendered (notebook page) ──────────── */}
                 {dayEntries.map((entry) => (
-                  <MealEntryCard key={entry.id} entry={entry} onDelete={isActive ? removeEntry : undefined} />
+                  <MealEntryCard key={entry.id} entry={entry} onDelete={isActive ? removeEntry : undefined} onEdit={isActive ? editEntry : undefined} />
                 ))}
 
                 {/* Inactive day empty state */}

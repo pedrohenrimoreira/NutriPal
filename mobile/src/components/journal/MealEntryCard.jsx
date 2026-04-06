@@ -4,9 +4,19 @@
  * Renders as flowing text on the journal page, not a boxed card or bubble.
  * Each entry is time-stamped, shows raw text, and optionally a photo or
  * parsed nutrition breakdown — all inline, notebook-style.
+ *
+ * Tapping the body text switches to an inline TextInput (Notion-like).
+ * After a 1-second debounce without changes, or on blur, the entry is
+ * re-analysed with the updated text.
  */
-import React from "react";
-import { View, Text, StyleSheet, TouchableOpacity } from "react-native";
+import React, { useState, useRef, useCallback, useEffect } from "react";
+import {
+  View,
+  Text,
+  TextInput,
+  StyleSheet,
+  TouchableOpacity,
+} from "react-native";
 import { Image } from "expo-image";
 import { useThemeStore } from "../../store/themeStore";
 import { colors, spacing, radius, typography } from "../../theme";
@@ -30,8 +40,13 @@ function buildImageCaption(imageAsset) {
   return parts.join(" · ");
 }
 
-export function MealEntryCard({ entry, onDelete }) {
+export function MealEntryCard({ entry, onDelete, onEdit }) {
   const C = useThemeStore((s) => s.colors);
+
+  const [isEditing, setIsEditing] = useState(false);
+  const [editText, setEditText] = useState(entry.rawText ?? "");
+  const debounceRef = useRef(null);
+  const lastCommittedRef = useRef(entry.rawText ?? "");
 
   const time = new Date(entry.createdAt).toLocaleTimeString("pt-BR", {
     hour: "2-digit",
@@ -45,6 +60,52 @@ export function MealEntryCard({ entry, onDelete }) {
   const hasBreakdown =
     !entry.isProcessing &&
     entry.parsedResult?.items?.length > 0;
+
+  useEffect(() => {
+    return () => {
+      if (debounceRef.current) clearTimeout(debounceRef.current);
+    };
+  }, []);
+
+  const commitEdit = useCallback(
+    (text) => {
+      const trimmed = text.trim();
+      if (trimmed && trimmed !== lastCommittedRef.current && onEdit) {
+        lastCommittedRef.current = trimmed;
+        onEdit(entry.id, trimmed);
+      }
+    },
+    [entry.id, onEdit],
+  );
+
+  const handleTapBody = useCallback(() => {
+    if (imageAsset?.uri) return;
+    setEditText(entry.rawText ?? "");
+    lastCommittedRef.current = entry.rawText ?? "";
+    setIsEditing(true);
+  }, [entry.rawText, imageAsset]);
+
+  const handleChangeText = useCallback(
+    (value) => {
+      setEditText(value);
+      if (debounceRef.current) clearTimeout(debounceRef.current);
+      debounceRef.current = setTimeout(() => {
+        debounceRef.current = null;
+        setIsEditing(false);
+        commitEdit(value);
+      }, 1000);
+    },
+    [commitEdit],
+  );
+
+  const handleBlur = useCallback(() => {
+    if (debounceRef.current) {
+      clearTimeout(debounceRef.current);
+      debounceRef.current = null;
+    }
+    setIsEditing(false);
+    commitEdit(editText);
+  }, [editText, commitEdit]);
 
   return (
     <View style={[styles.entry, { borderBottomColor: C.separator }]}>
@@ -71,9 +132,25 @@ export function MealEntryCard({ entry, onDelete }) {
         </View>
       </View>
 
-      {/* ── Body text ─────────────────────────────────────────────────── */}
+      {/* ── Body text (editable) ───────────────────────────────────────── */}
       {showText && (
-        <Text style={[styles.body, { color: C.textPrimary }]}>{entry.rawText}</Text>
+        isEditing ? (
+          <TextInput
+            style={[styles.body, styles.bodyInput, { color: C.textPrimary }]}
+            value={editText}
+            onChangeText={handleChangeText}
+            onBlur={handleBlur}
+            autoFocus
+            multiline
+            scrollEnabled={false}
+            selectionColor={C.accent ?? colors.systemBlue}
+            underlineColorAndroid="transparent"
+          />
+        ) : (
+          <TouchableOpacity onPress={handleTapBody} activeOpacity={0.7}>
+            <Text style={[styles.body, { color: C.textPrimary }]}>{entry.rawText}</Text>
+          </TouchableOpacity>
+        )
       )}
 
       {/* ── Photo ─────────────────────────────────────────────────────── */}
@@ -152,6 +229,10 @@ const styles = StyleSheet.create({
     color: "rgba(255,255,255,0.92)",
     lineHeight: 26,
     letterSpacing: -0.3,
+  },
+  bodyInput: {
+    padding: 0,
+    margin: 0,
   },
 
   imageBlock: {

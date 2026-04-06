@@ -16,6 +16,7 @@ function toDateStr(d) {
 
 let _entries = {};
 let _listeners = [];
+let _analysisVersions = {};
 
 export function getEntriesForDate(date) {
   return _entries[date] ?? [];
@@ -50,7 +51,8 @@ function makeImageAsset(imageInput) {
   };
 }
 
-function _updateParsedResult(id, result, forceRenderFn) {
+function _updateParsedResult(id, result, forceRenderFn, version) {
+  if (version !== undefined && _analysisVersions[id] !== version) return;
   const day = Object.keys(_entries).find((d) =>
     _entries[d].some((e) => e.id === id),
   );
@@ -150,6 +152,34 @@ export function useJournalStore() {
     forceRender((n) => n + 1);
   }, []);
 
+  const editEntry = useCallback(async (id, rawText) => {
+    const trimmed = rawText.trim();
+    if (!trimmed) return;
+
+    const day = Object.keys(_entries).find((d) =>
+      _entries[d].some((e) => e.id === id),
+    );
+    if (!day) return;
+
+    const version = (_analysisVersions[id] ?? 0) + 1;
+    _analysisVersions[id] = version;
+
+    _entries[day] = _entries[day].map((e) =>
+      e.id === id
+        ? { ...e, rawText: trimmed, parsedResult: undefined, isProcessing: true }
+        : e,
+    );
+    notify();
+    forceRender((n) => n + 1);
+
+    const savedMeals = useSettingsStore.getState().savedMeals;
+    const fallbackFn = (text) => estimateNutritionFromText(text, savedMeals);
+
+    analyzeTextEntry(trimmed, fallbackFn).then((parsed) => {
+      _updateParsedResult(id, parsed, forceRender, version);
+    });
+  }, []);
+
   return {
     entries,
     selectedDate,
@@ -158,6 +188,7 @@ export function useJournalStore() {
     addImageEntry,
     updateParsedResult,
     removeEntry,
+    editEntry,
     subscribe,
   };
 }
