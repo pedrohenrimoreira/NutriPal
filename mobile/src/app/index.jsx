@@ -141,9 +141,7 @@ function splitJournalLines(rawText) {
 }
 
 function getExternalSources(sources) {
-  return (sources ?? []).filter((source) =>
-    Boolean(source?.url) && /^https?:\/\//i.test(String(source.url)),
-  );
+  return Array.isArray(sources) ? sources : [];
 }
 
 /**
@@ -236,8 +234,8 @@ function AnnotationBadge({ insight, onPressSources }) {
         </Text>
         {sources.length > 0 ? (
           <View style={pS.sourcesRow}>
-            <Text style={[pS.sourcesText, { color: C.accentBlue }]}>
-              {sources.length} {sources.length === 1 ? "source" : "sources"}
+            <Text style={[pS.sourcesText, { color: C.accentBlue, fontSize: 9, opacity: 0.8 }]}>
+              {sources.map(s => s.label || "").filter(Boolean).join(" · ")}
             </Text>
           </View>
         ) : null}

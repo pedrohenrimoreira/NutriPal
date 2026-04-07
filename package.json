@@ -10,6 +10,10 @@
     "ai:typecheck": "npm --prefix ai-backend run typecheck"
   },
   "devDependencies": {
+    "@types/react": "~19.2.10",
     "typescript": "^6.0.2"
+  },
+  "dependencies": {
+    "expo": "^55.0.12"
   }
 }

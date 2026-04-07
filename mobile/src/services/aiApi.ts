@@ -32,21 +32,12 @@ function inferHostFromExpo() {
 }
 
 export function getAiApiBaseUrl() {
-  const fromEnv = process.env.EXPO_PUBLIC_AI_API_BASE_URL?.trim();
+  const fromEnv = process.env.EXPO_PUBLIC_AI_API_BASE_URL?.trim() || process.env.EXPO_PUBLIC_BASE_URL?.trim() || process.env.EXPO_PUBLIC_APP_URL?.trim();
   if (fromEnv) {
     return fromEnv.replace(/\/$/, "");
   }
 
-  const expoHost = inferHostFromExpo();
-  if (expoHost) {
-    return `http://${expoHost}:8787`;
-  }
-
-  if (Platform.OS === "android") {
-    return "http://10.0.2.2:8787";
-  }
-
-  return "http://localhost:8787";
+  return "https://34c911ea-d743-4ecc-8132-76ae59dd1227.created.app";
 }
 
 export class AiApiError extends Error {

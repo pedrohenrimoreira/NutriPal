@@ -140,8 +140,8 @@ export function useJournalStore() {
       day.analysisStatus = "idle";
       day.lastAnalyzedText = "";
       day.lineAnnotations = [];
-    } else if (day.analysisStatus !== "analyzing") {
-      day.analysisStatus = "idle";
+    } else {
+      day.analysisStatus = "analyzing";
     }
 
     notify();
