@@ -1,0 +1,35 @@
+env: load .env
+env: export EXPO_PUBLIC_APP_URL EXPO_PUBLIC_BASE_CREATE_USER_CONTENT_URL EXPO_PUBLIC_BASE_URL EXPO_PUBLIC_CREATE_ENV EXPO_PUBLIC_HOST EXPO_PUBLIC_PROJECT_GROUP_ID
+Starting project at D:\NutriPal\mobile
+Using src/app as the root directory for Expo Router.
+Starting Metro Bundler
+warning: Bundler cache is empty, rebuilding (this may take a minute)
+Waiting on http://localhost:8089
+Logs for your project will appear below.
+iOS .\index.tsx ░░░░░░░░░░░░░░░░  5.3% ( 5/26)
+iOS .\index.tsx ▓▓▓░░░░░░░░░░░░░ 20.3% ( 74/169)
+iOS .\index.tsx ▓▓▓░░░░░░░░░░░░░ 20.3% (177/411)
+iOS .\index.tsx ▓▓▓▓▓░░░░░░░░░░░ 32.4% (312/587)
+iOS .\index.tsx ▓▓▓▓▓░░░░░░░░░░░ 35.1% (388/658)
+iOS .\index.tsx ▓▓▓▓▓▓▓░░░░░░░░░ 45.1% (580/875)
+iOS .\index.tsx ▓▓▓▓▓▓▓░░░░░░░░░ 45.1% ( 604/1183)
+iOS .\index.tsx ▓▓▓▓▓▓▓░░░░░░░░░ 45.1% ( 727/1324)
+iOS .\index.tsx ▓▓▓▓▓▓▓░░░░░░░░░ 45.1% ( 894/1385)
+iOS .\index.tsx ▓▓▓▓▓▓▓▓░░░░░░░░ 54.6% (1059/1433)
+iOS .\index.tsx ▓▓▓▓▓▓▓▓▓▓░░░░░░ 64.6% (1179/1467)
+iOS .\index.tsx ▓▓▓▓▓▓▓▓▓▓▓░░░░░ 72.0% (1326/1571)
+iOS .\index.tsx ▓▓▓▓▓▓▓▓▓▓▓▓▓░░░ 81.6% (1454/1610)
+iOS .\index.tsx ░░░░░░░░░░░░░░░░  0.0% (0/1)
+iOS .\index.tsx ▓▓▓▓▓▓▓▓▓▓▓▓▓░░░ 85.7% (1581/1708)
+iOS .\index.tsx ░░░░░░░░░░░░░░░░  0.0% (0/1)
+iOS .\index.tsx ▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓░ 99.4% (1769/1775)
+iOS .\index.tsx ░░░░░░░░░░░░░░░░  0.0% (0/1)
+iOS Bundled 52995ms index.tsx (1776 modules)
+iOS Bundled 9078ms index.tsx (1 module)
+Android .\index.tsx ░░░░░░░░░░░░░░░░  0.0% (0/1)
+Android .\index.tsx ▓▓▓▓░░░░░░░░░░░░ 30.7% (200/363)
+Android .\index.tsx ▓▓▓▓▓▓▓▓▓▓░░░░░░ 66.1% (478/588)
+Android .\index.tsx ▓▓▓▓▓▓▓▓▓▓░░░░░░ 68.5% (654/791)
+Android .\index.tsx ▓▓▓▓▓▓▓▓▓▓▓▓░░░░ 80.6% ( 911/1028)
+Android .\index.tsx ▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓░ 99.6% (1120/1122)
+Android Bundled 18478ms index.tsx (1130 modules)

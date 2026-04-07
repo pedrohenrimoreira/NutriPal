@@ -3,7 +3,11 @@
   "private": true,
   "scripts": {
     "mobile:start": "npm --prefix mobile run start",
-    "mobile:start:go": "npm --prefix mobile run start:go"
+    "mobile:start:go": "npm --prefix mobile run start:go",
+    "ai:dev": "npm --prefix ai-backend run dev",
+    "ai:build": "npm --prefix ai-backend run build",
+    "ai:start": "npm --prefix ai-backend run start",
+    "ai:typecheck": "npm --prefix ai-backend run typecheck"
   },
   "devDependencies": {
     "typescript": "^6.0.2"

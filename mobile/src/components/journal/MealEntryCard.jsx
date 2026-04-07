@@ -1,25 +1,19 @@
 /**
- * MealEntryCard — inline notebook entry.
+ * MealEntryCard
  *
- * Renders as flowing text on the journal page, not a boxed card or bubble.
- * Each entry is time-stamped, shows raw text, and optionally a photo or
- * parsed nutrition breakdown — all inline, notebook-style.
- *
- * Tapping the body text switches to an inline TextInput (Notion-like).
- * After a 1-second debounce without changes, or on blur, the entry is
- * re-analysed with the updated text.
+ * Image entries remain separate blocks inside the journal flow.
+ * Typed text now lives in the single shared journal note input.
  */
-import React, { useState, useRef, useCallback, useEffect } from "react";
+import React from "react";
 import {
   View,
   Text,
-  TextInput,
   StyleSheet,
-  TouchableOpacity,
 } from "react-native";
 import { Image } from "expo-image";
 import { useThemeStore } from "../../store/themeStore";
 import { spacing, radius, typography } from "../../theme";
+import { GlassIconButton } from "../GlassIconButton";
 
 function resolveImageAsset(entry) {
   if (entry?.imageAsset?.uri) return entry.imageAsset;
@@ -31,98 +25,35 @@ function resolveImageAsset(entry) {
 function buildImageCaption(imageAsset) {
   if (!imageAsset) return "";
   const parts = [];
+
   if (imageAsset.source) parts.push(imageAsset.source);
   if (imageAsset.fileName) parts.push(imageAsset.fileName);
+
   if (typeof imageAsset.fileSize === "number" && imageAsset.fileSize > 0) {
     const kb = imageAsset.fileSize / 1024;
     parts.push(kb < 1024 ? `${kb.toFixed(0)} KB` : `${(kb / 1024).toFixed(1)} MB`);
   }
-  return parts.join(" · ");
+
+  return parts.join(" \u00B7 ");
 }
 
-export function MealEntryCard({ entry, onDelete, onEdit, onEditingChange }) {
+export function MealEntryCard({ entry, onDelete }) {
   const C = useThemeStore((s) => s.colors);
-
-  const [isEditing, setIsEditing] = useState(false);
-  const [editText, setEditText] = useState(entry.rawText ?? "");
-  const debounceRef = useRef(null);
-  const lastCommittedRef = useRef(entry.rawText ?? "");
-
-  const setEditing = useCallback((val) => {
-    setIsEditing(val);
-    onEditingChange?.(val);
-  }, [onEditingChange]);
 
   const time = new Date(entry.createdAt).toLocaleTimeString("pt-BR", {
     hour: "2-digit",
     minute: "2-digit",
   });
-
   const imageAsset = resolveImageAsset(entry);
   const imageCaption = buildImageCaption(imageAsset);
+  const hasBreakdown = !entry.isProcessing && entry.parsedResult?.items?.length > 0;
 
-  const showText = Boolean(entry.rawText?.trim()) && !imageAsset?.uri;
-  const hasBreakdown =
-    !entry.isProcessing &&
-    entry.parsedResult?.items?.length > 0;
-
-  const isEditingRef = useRef(false);
-  useEffect(() => {
-    isEditingRef.current = isEditing;
-  }, [isEditing]);
-
-  useEffect(() => {
-    return () => {
-      if (debounceRef.current) clearTimeout(debounceRef.current);
-      if (isEditingRef.current) {
-        onEditingChange?.(false);
-      }
-    };
-  }, [onEditingChange]);
-
-  const commitEdit = useCallback(
-    (text) => {
-      const trimmed = text.trim();
-      if (trimmed && trimmed !== lastCommittedRef.current && onEdit) {
-        lastCommittedRef.current = trimmed;
-        onEdit(entry.id, trimmed);
-      }
-    },
-    [entry.id, onEdit],
-  );
-
-  const handleTapBody = useCallback(() => {
-    if (imageAsset?.uri) return;
-    setEditText(entry.rawText ?? "");
-    lastCommittedRef.current = entry.rawText ?? "";
-    setEditing(true);
-  }, [entry.rawText, imageAsset, setEditing]);
-
-  const handleChangeText = useCallback(
-    (value) => {
-      setEditText(value);
-      if (debounceRef.current) clearTimeout(debounceRef.current);
-      debounceRef.current = setTimeout(() => {
-        debounceRef.current = null;
-        setEditing(false);
-        commitEdit(value);
-      }, 1000);
-    },
-    [commitEdit, setEditing],
-  );
-
-  const handleBlur = useCallback(() => {
-    if (debounceRef.current) {
-      clearTimeout(debounceRef.current);
-      debounceRef.current = null;
-    }
-    setEditing(false);
-    commitEdit(editText);
-  }, [editText, commitEdit, setEditing]);
+  if (!imageAsset?.uri && !entry.rawText?.trim()) {
+    return null;
+  }
 
   return (
     <View style={styles.entry}>
-      {/* ── Meta row: time · processing indicator · kcal ─────────────── */}
       <View style={styles.meta}>
         <Text style={[styles.time, { color: C.textTertiary }]}>{time}</Text>
         <View style={styles.metaRight}>
@@ -133,41 +64,26 @@ export function MealEntryCard({ entry, onDelete, onEdit, onEditingChange }) {
               {Math.round(entry.parsedResult.totals.calories)} kcal
             </Text>
           ) : null}
-          {onDelete && (
-            <TouchableOpacity
+          {onDelete ? (
+            <GlassIconButton
               onPress={() => onDelete(entry.id)}
-              hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
-              style={styles.deleteButton}
-            >
-              <Text style={[styles.deleteIcon, { color: C.textTertiary }]}>✕</Text>
-            </TouchableOpacity>
-          )}
+              accessibilityLabel="Remover refeicao"
+              symbolName="xmark"
+              fallbackIconName="close"
+              color={C.textTertiary}
+              tone="destructive"
+              size={28}
+              iconSize={14}
+            />
+          ) : null}
         </View>
       </View>
 
-      {/* ── Body text (editable) ───────────────────────────────────────── */}
-      {showText && (
-        isEditing ? (
-          <TextInput
-            style={[styles.body, styles.bodyInput, { color: C.textPrimary }]}
-            value={editText}
-            onChangeText={handleChangeText}
-            onBlur={handleBlur}
-            autoFocus
-            multiline
-            scrollEnabled={false}
-            selectionColor={C.accent ?? "#007AFF"}
-            underlineColorAndroid="transparent"
-          />
-        ) : (
-          <TouchableOpacity onPress={handleTapBody} activeOpacity={0.7}>
-            <Text style={[styles.body, { color: C.textPrimary }]}>{entry.rawText}</Text>
-          </TouchableOpacity>
-        )
-      )}
+      {entry.rawText?.trim() ? (
+        <Text style={[styles.body, { color: C.textPrimary }]}>{entry.rawText}</Text>
+      ) : null}
 
-      {/* ── Photo ─────────────────────────────────────────────────────── */}
-      {imageAsset?.uri && (
+      {imageAsset?.uri ? (
         <View style={styles.imageBlock}>
           <Image
             source={{ uri: imageAsset.uri }}
@@ -181,20 +97,19 @@ export function MealEntryCard({ entry, onDelete, onEdit, onEditingChange }) {
             </Text>
           ) : null}
         </View>
-      )}
+      ) : null}
 
-      {/* ── Parsed items breakdown ────────────────────────────────────── */}
-      {hasBreakdown && (
+      {hasBreakdown ? (
         <View style={styles.breakdown}>
-          {entry.parsedResult.items.map((item, i) => (
-            <Text key={`${item.name}-${i}`} style={[styles.breakdownItem, { color: C.textSecondary }]}>
+          {entry.parsedResult.items.map((item, index) => (
+            <Text key={`${item.name}-${index}`} style={[styles.breakdownItem, { color: C.textSecondary }]}>
               {item.name}
-              <Text style={[styles.breakdownDot, { color: C.textTertiary }]}> · </Text>
+              <Text style={[styles.breakdownDot, { color: C.textTertiary }]}> {" \u00B7 "} </Text>
               <Text style={[styles.breakdownCal, { color: C.textTertiary }]}>{item.calories} kcal</Text>
             </Text>
           ))}
         </View>
-      )}
+      ) : null}
     </View>
   );
 }
@@ -204,44 +119,37 @@ const styles = StyleSheet.create({
     paddingTop: spacing.lg,
     paddingBottom: spacing.lg,
   },
-
   meta: {
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "space-between",
     marginBottom: spacing.xs + 2,
   },
-  time: {
-    fontSize: 12,
-    fontWeight: "500",
-    letterSpacing: 0.3,
-  },
   metaRight: {
     flexDirection: "row",
     alignItems: "center",
     gap: spacing.sm,
   },
+  time: {
+    fontSize: 12,
+    fontWeight: "500",
+    letterSpacing: 0.3,
+  },
   processing: {
     fontSize: 12,
     fontStyle: "italic",
-    letterSpacing: 0.5,
+    letterSpacing: 0.4,
   },
   kcal: {
     fontSize: 13,
     fontWeight: "600",
     letterSpacing: -0.1,
   },
-
   body: {
     ...typography.body,
     lineHeight: 26,
     letterSpacing: -0.3,
   },
-  bodyInput: {
-    padding: 0,
-    margin: 0,
-  },
-
   imageBlock: {
     marginTop: spacing.sm,
   },
@@ -255,30 +163,17 @@ const styles = StyleSheet.create({
     marginTop: spacing.xs,
     letterSpacing: -0.1,
   },
-
   breakdown: {
     marginTop: spacing.sm,
-    gap: 3,
-    paddingLeft: 2,
+    gap: spacing.xs,
   },
   breakdownItem: {
-    fontSize: 13,
-    lineHeight: 19,
-    letterSpacing: -0.1,
+    ...typography.footnote,
   },
   breakdownDot: {
+    ...typography.caption1,
   },
   breakdownCal: {
-    fontWeight: "400",
-  },
-
-  deleteButton: {
-    marginLeft: spacing.xs,
-    padding: 2,
-  },
-  deleteIcon: {
-    fontSize: 13,
-    fontWeight: "500",
-    color: "#48484a",
+    ...typography.caption1,
   },
 });

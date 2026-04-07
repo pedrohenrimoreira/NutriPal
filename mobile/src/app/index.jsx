@@ -10,33 +10,67 @@ import React, {
   useState, useRef, useCallback, useMemo, useEffect,
 } from "react";
 import {
-  View, Text, TextInput, TouchableOpacity, ScrollView, FlatList,
+  View, Text, TextInput, TouchableOpacity, ScrollView, FlatList, Image, Pressable,
   KeyboardAvoidingView, Platform, StyleSheet, Keyboard, LayoutAnimation,
-  useWindowDimensions, Modal, Alert, Appearance, Switch,
+  useWindowDimensions, Modal, Alert, Switch, Linking,
 } from "react-native";
 
 import * as ImagePicker from "expo-image-picker";
+import { useRouter } from "expo-router";
 import { SymbolView } from "expo-symbols";
 import { GlassView, isLiquidGlassAvailable } from "expo-glass-effect";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { StatusBar } from "expo-status-bar";
 import BottomSheet, { BottomSheetView, BottomSheetScrollView } from "@gorhom/bottom-sheet";
 import { Calendar } from "react-native-calendars";
+import {
+  Bell,
+  ChartBarBig,
+  Clock3,
+  Crown,
+  FileText,
+  Heart,
+  Info,
+  LogOut,
+  MessageCircle,
+  Mic,
+  Moon,
+  Scale,
+  Share,
+  Star,
+  SunMedium,
+  Target,
+  Trash2,
+  TrendingDown,
+  TriangleAlert,
+  UtensilsCrossed,
+} from "lucide-react-native";
 import { AnimatePresence, MotiView } from "moti";
 
-import { useJournalStore, useDailyTotals, getEntriesForDate } from "../store/journalStore";
+import {
+  useJournalStore,
+  useDailyTotals,
+  getEntriesForDate,
+  getJournalForDate,
+} from "../store/journalStore";
 import { useSettingsStore } from "../store/settingsStore";
 import { useThemeStore } from "../store/themeStore";
 import { estimateNutritionFromText } from "../utils/nutrition";
-import { analyzeTextEntry } from "../services/gemini";
 import { useSpeechRecognition } from "../hooks/useSpeechRecognition";
+import { analyzeJournalText } from "../services/journalAnalysis";
 import { MealEntryCard } from "../components/journal/MealEntryCard";
 import { ActionBar } from "../components/journal/ActionBar";
 import { GoalsPanel } from "../components/journal/GoalsPanel";
+import { JournalSummaryBar } from "../components/journal/JournalSummaryBar";
+import { ThinkingShimmer } from "../components/journal/ThinkingShimmer";
+import { GlassIconButton } from "../components/GlassIconButton";
+import journalHaptics from "../utils/journalHaptics";
 import { colors, spacing, radius, typography } from "../theme";
 
 const WEB_TOP_INSET = Platform.OS === "web" ? 16 : 0;
 const WEB_BOTTOM_INSET = Platform.OS === "web" ? 34 : 0;
+const HEADER_DOG_ICON = require("../../assets/images/header-dog.png");
+const INLINE_BADGE_WIDTH = 92;
 
 /* ── helpers ──────────────────────────────────────────────────────────────── */
 
@@ -70,21 +104,167 @@ function formatMonthYear(dateStr) {
 const glass = (fallback) =>
   isLiquidGlassAvailable() ? {} : { backgroundColor: fallback };
 
+const ICON_BY_SYMBOL = {
+  "scalemass.fill": Scale,
+  "chart.bar.fill": ChartBarBig,
+  "heart.fill": Heart,
+  "doc.text.fill": FileText,
+  "chart.line.downtrend.xyaxis": TrendingDown,
+  "fork.knife": UtensilsCrossed,
+  target: Target,
+  "bell.fill": Bell,
+  "moon.fill": Moon,
+  "sun.max.fill": SunMedium,
+  "clock.fill": Clock3,
+  "mic.fill": Mic,
+  "crown.fill": Crown,
+  "star.fill": Star,
+  "info.circle.fill": Info,
+  "bubble.left.fill": MessageCircle,
+  "trash.fill": Trash2,
+  "square.and.arrow.up.fill": Share,
+  "exclamationmark.triangle.fill": TriangleAlert,
+  "rectangle.portrait.and.arrow.right.fill": LogOut,
+};
+
+function splitJournalLines(rawText) {
+  const normalized = String(rawText ?? "");
+  if (!normalized.length) {
+    return [];
+  }
+
+  return normalized.split(/\r?\n/).map((line, lineIndex) => ({
+    lineIndex,
+    rawText: line,
+    sourceText: line.trim(),
+  }));
+}
+
+function getExternalSources(sources) {
+  return (sources ?? []).filter((source) =>
+    Boolean(source?.url) && /^https?:\/\//i.test(String(source.url)),
+  );
+}
+
+/**
+ * Build per-line insight objects for every non-empty line.
+ * Each line gets one of: { type: "ready" }, { type: "thinking" }, { type: "error" }, or null.
+ */
+function buildAllLineInsights(rawText, journal) {
+  const lines = splitJournalLines(rawText);
+  const annotations = new Map(
+    (journal?.lineAnnotations ?? []).map((a) => [a.lineIndex, a]),
+  );
+  const isAnalyzing = journal?.analysisStatus === "analyzing";
+  const isError = journal?.analysisStatus === "error";
+
+  return lines
+    .filter((line) => line.sourceText.length > 0)
+    .map((line) => {
+      const existing = annotations.get(line.lineIndex);
+
+      if (existing?.sourceText === line.sourceText) {
+        return {
+          type: "ready",
+          ...existing,
+          lineIndex: line.lineIndex,
+          isLoading: false,
+          error: existing.error ?? null,
+        };
+      }
+
+      if (isAnalyzing) {
+        return {
+          type: "thinking",
+          lineIndex: line.lineIndex,
+          sourceText: line.sourceText,
+        };
+      }
+
+      if (isError) {
+        return {
+          type: "error",
+          lineIndex: line.lineIndex,
+          sourceText: line.sourceText,
+          error: journal.analysisError ?? "Nao foi possivel analisar o texto.",
+        };
+      }
+
+      return null;
+    })
+    .filter(Boolean);
+}
+
+/* ── inline annotation badge (per-line, right-aligned) ──────────────────── */
+
+function AnnotationBadge({ insight, onPressSources }) {
+  const C = useThemeStore((s) => s.colors);
+
+  if (!insight) return null;
+
+  if (insight.type === "thinking") {
+    return (
+      <View style={pS.badge}>
+        <ThinkingShimmer />
+      </View>
+    );
+  }
+
+  if (insight.type === "error") {
+    return (
+      <View style={pS.badge}>
+        <Text style={[pS.errorText, { color: C.accentRed }]}>No match</Text>
+      </View>
+    );
+  }
+
+  if (insight.type !== "ready") return null;
+
+  const sources = getExternalSources(insight.sources);
+  const cal = Math.round(insight.totals?.calories ?? 0);
+
+  return (
+    <TouchableOpacity
+      style={pS.badge}
+      onPress={() => onPressSources?.(insight)}
+      activeOpacity={0.7}
+      hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+    >
+      <View style={pS.badgeStack}>
+        <Text style={[pS.calText, { color: C.accentBlue }]}>
+          {cal} cal
+        </Text>
+        {sources.length > 0 ? (
+          <View style={pS.sourcesRow}>
+            <Text style={[pS.sourcesText, { color: C.accentBlue }]}>
+              {sources.length} {sources.length === 1 ? "source" : "sources"}
+            </Text>
+          </View>
+        ) : null}
+      </View>
+    </TouchableOpacity>
+  );
+}
+
 /* ── settings sub-components ─────────────────────────────────────────────── */
 
-// iOS-style rounded-square icon badge with SF Symbol support
+// Settings icon slot with SF Symbols on iOS and Lucide fallback elsewhere
 function IconBadge({ color, icon, sfName }) {
+  const LucideIcon = sfName ? ICON_BY_SYMBOL[sfName] : null;
+
   return (
-    <View style={[sS.iconBadge, { backgroundColor: color }]}>
+    <View style={sS.iconBadge}>
       {Platform.OS === "ios" && sfName ? (
         <SymbolView
           name={sfName}
           style={sS.symbol}
-          type="hierarchical"
-          tintColor="#ffffff"
+          type="monochrome"
+          tintColor={color}
         />
+      ) : LucideIcon ? (
+        <LucideIcon color={color} size={18} strokeWidth={2.15} />
       ) : (
-        <Text style={sS.badgeIcon}>{icon}</Text>
+        <Text style={[sS.badgeIcon, { color }]}>{icon}</Text>
       )}
     </View>
   );
@@ -92,6 +272,11 @@ function IconBadge({ color, icon, sfName }) {
 
 function NavRow({ badge, badgeColor, sfName, label, sublabel, value, onPress, isLast }) {
   const C = useThemeStore((s) => s.colors);
+  const handlePress = useCallback(() => {
+    if (!onPress) return;
+    journalHaptics.light();
+    onPress();
+  }, [onPress]);
   const content = (
     <View style={[sS.row, isLast && sS.rowLast]}>
       {badge ? <IconBadge color={badgeColor} icon={badge} sfName={sfName} /> : null}
@@ -104,12 +289,16 @@ function NavRow({ badge, badgeColor, sfName, label, sublabel, value, onPress, is
     </View>
   );
   return onPress ? (
-    <TouchableOpacity onPress={onPress} activeOpacity={0.7}>{content}</TouchableOpacity>
+    <TouchableOpacity onPress={handlePress} activeOpacity={0.7}>{content}</TouchableOpacity>
   ) : content;
 }
 
 function ToggleRow({ badge, badgeColor, sfName, label, sublabel, value, onToggle, isLast }) {
   const C = useThemeStore((s) => s.colors);
+  const handleToggle = useCallback((nextValue) => {
+    journalHaptics.selection();
+    onToggle(nextValue);
+  }, [onToggle]);
   return (
     <View style={[sS.row, isLast && sS.rowLast]}>
       {badge ? <IconBadge color={badgeColor} icon={badge} sfName={sfName} /> : null}
@@ -123,7 +312,7 @@ function ToggleRow({ badge, badgeColor, sfName, label, sublabel, value, onToggle
       ]}>
         <Switch
           value={value}
-          onValueChange={onToggle}
+          onValueChange={handleToggle}
           trackColor={{ false: "transparent", true: "transparent" }}
           thumbColor="#ffffff"
           ios_backgroundColor="transparent"
@@ -137,6 +326,10 @@ function ToggleRow({ badge, badgeColor, sfName, label, sublabel, value, onToggle
 function AppearanceRow({ colorMode, onToggle }) {
   const C = useThemeStore((s) => s.colors);
   const isDark = colorMode === "dark";
+  const handleToggle = useCallback((mode) => {
+    journalHaptics.selection();
+    onToggle(mode);
+  }, [onToggle]);
   return (
     <View style={sS.row}>
       <IconBadge
@@ -151,14 +344,14 @@ function AppearanceRow({ colorMode, onToggle }) {
       <View style={sS.segmentedControl}>
         <TouchableOpacity
           style={[sS.segBtn, !isDark && sS.segBtnActive]}
-          onPress={() => onToggle("light")}
+          onPress={() => handleToggle("light")}
           activeOpacity={0.75}
         >
           <Text style={[sS.segLabel, !isDark && sS.segLabelActive]}>Light</Text>
         </TouchableOpacity>
         <TouchableOpacity
           style={[sS.segBtn, isDark && sS.segBtnActive]}
-          onPress={() => onToggle("dark")}
+          onPress={() => handleToggle("dark")}
           activeOpacity={0.75}
         >
           <Text style={[sS.segLabel, isDark && sS.segLabelActive]}>Dark</Text>
@@ -188,16 +381,20 @@ function SectionTitle({ title }) {
 /* ── main screen ─────────────────────────────────────────────────────────── */
 
 export default function Index() {
+  const router = useRouter();
   const {
     entries,
+    journal,
     selectedDate,
     setDate,
-    addTextEntry,
+    setJournalText,
+    beginJournalAnalysis,
+    completeJournalAnalysis,
+    failJournalAnalysis,
     addImageEntry,
     removeEntry,
-    editEntry,
   } = useJournalStore();
-  const totals = useDailyTotals(entries);
+  const totals = useDailyTotals(journal, entries);
   const savedMeals = useSettingsStore((state) => state.savedMeals);
   const addSavedMeal = useSettingsStore((state) => state.addSavedMeal);
   const removeSavedMeal = useSettingsStore((state) => state.removeSavedMeal);
@@ -218,11 +415,8 @@ export default function Index() {
   const handleToggleAppearance = useCallback((mode) => setColorMode(mode), [setColorMode]);
 
   const [isEditing, setIsEditing] = useState(false);
-  const [cardIsEditing, setCardIsEditing] = useState(false);
-  const [text, setText] = useState("");
+  const [text, setText] = useState(journal.rawText ?? "");
   const textRef = useRef("");
-  const [liveAnalysis, setLiveAnalysis] = useState(null);
-  const [isAnalyzing, setIsAnalyzing] = useState(false);
   const analysisTimerRef = useRef(null);
   const [keyboardVisible, setKeyboardVisible] = useState(false);
   const [keyboardHeight, setKeyboardHeight] = useState(0);
@@ -234,6 +428,7 @@ export default function Index() {
   const [savedMealName, setSavedMealName] = useState("");
   const [pendingSavedMeal, setPendingSavedMeal] = useState(null);
   const [cameraMenuVisible, setCameraMenuVisible] = useState(false);
+  const [selectedNutritionDetail, setSelectedNutritionDetail] = useState(null);
 
   const { width } = useWindowDimensions();
   const inputRef = useRef(null);
@@ -241,13 +436,17 @@ export default function Index() {
   const swipeRef = useRef(null);
   const calSheetRef = useRef(null);
   const settingsSheetRef = useRef(null);
+  const nutritionSheetRef = useRef(null);
   const dictationBaseTextRef = useRef("");
   const isListeningRef = useRef(isListening);
 
   const prevDate = useMemo(() => offsetDay(selectedDate, -1), [selectedDate]);
   const nextDate = useMemo(() => offsetDay(selectedDate, +1), [selectedDate]);
 
-  const isThinking = useMemo(() => entries.some((e) => e.isProcessing), [entries]);
+  const lineInsights = useMemo(
+    () => buildAllLineInsights(text, journal),
+    [journal, text],
+  );
 
   const todayStr = useMemo(() => toDateStr(new Date()), []);
   const dateLabel = useMemo(() => formatDateLabel(selectedDate), [selectedDate]);
@@ -293,7 +492,6 @@ export default function Index() {
       if (!isListeningRef.current) {
         setIsEditing(false);
       }
-      setCardIsEditing(false);
     });
 
     return () => {
@@ -309,19 +507,35 @@ export default function Index() {
   }, [selectedDate]);
 
   useEffect(() => {
+    cancelDebounce();
+  }, [cancelDebounce, selectedDate]);
+
+  useEffect(() => {
+    nutritionSheetRef.current?.close();
+    setSelectedNutritionDetail(null);
+  }, [selectedDate]);
+
+  useEffect(() => {
+    const nextText = journal.rawText ?? "";
+    textRef.current = nextText;
+    setText(nextText);
+  }, [journal.rawText, selectedDate]);
+
+  useEffect(() => {
     if (!transcript) return;
 
     const base = dictationBaseTextRef.current.trim();
     const nextText = [base, transcript].filter(Boolean).join(" ").trim();
     textRef.current = nextText;
     setText(nextText);
+    setJournalText(nextText);
 
     if (!isEditing) {
       LayoutAnimation.configureNext(LayoutAnimation.Presets.easeInEaseOut);
       setIsEditing(true);
       setTimeout(() => inputRef.current?.focus(), 50);
     }
-  }, [transcript, isEditing]);
+  }, [transcript, isEditing, setJournalText]);
 
   /* handlers -------------------------------------------------------------- */
 
@@ -334,29 +548,40 @@ export default function Index() {
 
   useEffect(() => () => cancelDebounce(), [cancelDebounce]);
 
+  const dismissEditingContext = useCallback(() => {
+    cancelDebounce();
+    if (isListeningRef.current) {
+      stopListening();
+    }
+    Keyboard.dismiss();
+    setIsEditing(false);
+  }, [cancelDebounce, stopListening]);
+
   const handleDaySwipe = useCallback((e) => {
     const x = e.nativeEvent.contentOffset.x;
     if (x < width * 0.5) {
       cancelDebounce();
+      if (isListening) {
+        stopListening();
+      }
       Keyboard.dismiss();
       setIsEditing(false);
-      textRef.current = "";
-      setText("");
-      setLiveAnalysis(null);
-      setIsAnalyzing(false);
+      clearTranscript();
+      dictationBaseTextRef.current = "";
       setDate(offsetDay(selectedDate, -1));
     } else if (x > width * 1.5) {
       cancelDebounce();
+      if (isListening) {
+        stopListening();
+      }
       Keyboard.dismiss();
       setIsEditing(false);
-      textRef.current = "";
-      setText("");
-      setLiveAnalysis(null);
-      setIsAnalyzing(false);
+      clearTranscript();
+      dictationBaseTextRef.current = "";
       setDate(offsetDay(selectedDate, +1));
     }
     // If user bounced back to center, no state change needed
-  }, [cancelDebounce, selectedDate, setDate, width]);
+  }, [cancelDebounce, clearTranscript, isListening, selectedDate, setDate, stopListening, width]);
 
   const handleStartEditing = useCallback(() => {
     LayoutAnimation.configureNext(LayoutAnimation.Presets.easeInEaseOut);
@@ -364,92 +589,73 @@ export default function Index() {
     setTimeout(() => inputRef.current?.focus(), 50);
   }, []);
 
-  const commitCurrentText = useCallback(async () => {
-    if (isListening) {
-      stopListening();
-    }
+  const handleInputFocus = useCallback(() => {
+    setIsEditing(true);
+  }, []);
 
-    const raw = textRef.current.trim();
-    if (!raw) {
-      Keyboard.dismiss();
+  const handleInputBlur = useCallback(() => {
+    if (!isListeningRef.current) {
       setIsEditing(false);
-      return;
     }
-
-    const blocks = raw.split(/\n\s*\n/).map((b) => b.trim()).filter(Boolean);
-    textRef.current = "";
-    setText("");
-    setLiveAnalysis(null);
-    setIsAnalyzing(false);
-    clearTranscript();
-    dictationBaseTextRef.current = "";
-
-    for (const block of blocks) {
-      await addTextEntry(block);
-    }
-
-    setTimeout(() => scrollRef.current?.scrollToEnd({ animated: true }), 100);
-  }, [addTextEntry, clearTranscript, isListening, stopListening]);
-
-  const handleSubmit = useCallback(async () => {
-    cancelDebounce();
-    await commitCurrentText();
-  }, [cancelDebounce, commitCurrentText]);
+  }, []);
 
   const handleTextChange = useCallback((value) => {
     textRef.current = value;
     setText(value);
+    setJournalText(value);
     cancelDebounce();
 
     if (!value.trim()) {
-      setLiveAnalysis(null);
-      setIsAnalyzing(false);
       return;
     }
 
-    if (value.endsWith("\n\n")) {
-      commitCurrentText();
-      return;
-    }
-
-    setIsAnalyzing(true);
     analysisTimerRef.current = setTimeout(async () => {
       analysisTimerRef.current = null;
-      const snapshotText = textRef.current.trim();
-      if (!snapshotText) {
-        setLiveAnalysis(null);
-        setIsAnalyzing(false);
+      const snapshotText = textRef.current;
+      const snapshotDate = selectedDate;
+      const snapshotAnnotations = journal.lineAnnotations ?? [];
+
+      if (!snapshotText.trim()) {
         return;
       }
-      const savedMeals = useSettingsStore.getState().savedMeals;
-      const fallbackFn = (t) => estimateNutritionFromText(t, savedMeals);
-      const result = await analyzeTextEntry(snapshotText, fallbackFn);
-      if (textRef.current.trim() === snapshotText) {
-        setLiveAnalysis(result);
-        setIsAnalyzing(false);
+
+      const version = beginJournalAnalysis(snapshotText, snapshotDate);
+
+      try {
+        const result = await analyzeJournalText(snapshotText, snapshotAnnotations);
+        completeJournalAnalysis(snapshotDate, version, result.analyzedText, result);
+      } catch (analysisError) {
+        failJournalAnalysis(snapshotDate, version, analysisError?.message);
       }
-    }, 1000);
-  }, [cancelDebounce, commitCurrentText]);
+    }, 1200);
+  }, [
+    beginJournalAnalysis,
+    cancelDebounce,
+    completeJournalAnalysis,
+    failJournalAnalysis,
+    journal.lineAnnotations,
+    selectedDate,
+    setJournalText,
+  ]);
 
   const handleDismissKeyboard = useCallback(() => {
-    cancelDebounce();
-    if (isListening) {
-      stopListening();
-    }
-    Keyboard.dismiss();
-    setIsEditing(false);
-  }, [cancelDebounce, isListening, stopListening]);
+    journalHaptics.selection();
+    dismissEditingContext();
+  }, [dismissEditingContext]);
 
-  const handleCardEditingChange = useCallback((val) => {
-    setCardIsEditing(val);
-  }, []);
+  const handleRemoveEntry = useCallback((id) => {
+    journalHaptics.medium();
+    removeEntry(id);
+  }, [removeEntry]);
 
   const handleToggleMic = useCallback(async () => {
     if (isListening) {
+      journalHaptics.selection();
       stopListening();
       return;
     }
 
+    journalHaptics.light();
     LayoutAnimation.configureNext(LayoutAnimation.Presets.easeInEaseOut);
     setIsEditing(true);
     setTimeout(() => inputRef.current?.focus(), 50);
@@ -525,6 +731,7 @@ export default function Index() {
   const closeCameraMenu = useCallback(() => setCameraMenuVisible(false), []);
 
   const handleCameraMenuAction = useCallback((action) => {
+    journalHaptics.selection();
     setCameraMenuVisible(false);
     // Small delay so modal dismisses before launching picker
     setTimeout(() => {
@@ -537,6 +744,8 @@ export default function Index() {
   }, [handlePickImage]);
 
   const handleOpenCamera = useCallback(() => {
+    journalHaptics.light();
+    dismissEditingContext();
     if (Platform.OS === "ios") {
       setCameraMenuVisible(true);
       return;
@@ -556,9 +765,10 @@ export default function Index() {
     }
 
     void handlePickImage("library");
-  }, [handlePickImage]);
+  }, [dismissEditingContext, handlePickImage]);
 
   const handleAddSavedMeal = useCallback(() => {
+    journalHaptics.light();
     const currentText = text.trim();
     const latestEntry = entries[entries.length - 1];
     const sourceText =
@@ -584,18 +794,20 @@ export default function Index() {
     const suggestedName =
       sourceText.length > 40 ? `${sourceText.slice(0, 40).trim()}...` : sourceText;
 
+    dismissEditingContext();
     setPendingSavedMeal({
       items: sourceText,
       totals: parsedResult.totals,
     });
     setSavedMealName(suggestedName);
     setSaveMealModalVisible(true);
-  }, [entries, handleStartEditing, savedMeals, text]);
+  }, [dismissEditingContext, entries, handleStartEditing, savedMeals, text]);
 
   const handleConfirmSaveMeal = useCallback(() => {
     const name = savedMealName.trim();
     if (!name || !pendingSavedMeal) return;
 
+    journalHaptics.medium();
     addSavedMeal({
       name,
       items: pendingSavedMeal.items,
@@ -620,23 +832,85 @@ export default function Index() {
         {
           text: "Excluir",
           style: "destructive",
-          onPress: () => removeSavedMeal(meal.id),
+          onPress: () => {
+            journalHaptics.medium();
+            removeSavedMeal(meal.id);
+          },
         },
       ],
     );
   }, [removeSavedMeal]);
 
-  const handleToggleGoals = useCallback(() => setGoalsExpanded((v) => !v), []);
+  const handleToggleGoals = useCallback(() => {
+    journalHaptics.selection();
+    setGoalsExpanded((v) => !v);
+  }, []);
 
-  const openCalendar = useCallback(() => calSheetRef.current?.expand(), []);
+  const handleCloseGoals = useCallback(() => {
+    setGoalsExpanded(false);
+  }, []);
+
+  const openCalendar = useCallback(() => {
+    journalHaptics.light();
+    dismissEditingContext();
+    calSheetRef.current?.expand();
+  }, [dismissEditingContext]);
   const openSettings = useCallback(() => {
+    journalHaptics.light();
+    dismissEditingContext();
     setSettingsView("main");
     settingsSheetRef.current?.expand();
+  }, [dismissEditingContext]);
+  const openAiAssistant = useCallback(() => {
+    journalHaptics.light();
+    dismissEditingContext();
+    router.push("/ai");
+  }, [dismissEditingContext, router]);
+  const openSavedMealsManager = useCallback(() => {
+    dismissEditingContext();
+    setSettingsView("savedMeals");
+  }, [dismissEditingContext]);
+  const closeCalendar = useCallback(() => {
+    journalHaptics.selection();
+    calSheetRef.current?.close();
   }, []);
-  const closeCalendar = useCallback(() => calSheetRef.current?.close(), []);
   const closeSettings = useCallback(() => {
+    journalHaptics.selection();
     setSettingsView("main");
     settingsSheetRef.current?.close();
+  }, []);
+
+  const openNutritionDetails = useCallback((detail) => {
+    if (!detail || detail.type !== "ready") {
+      return;
+    }
+
+    journalHaptics.light();
+    setSelectedNutritionDetail({
+      ...detail,
+      sources: getExternalSources(detail.sources),
+    });
+    nutritionSheetRef.current?.expand();
+  }, []);
+
+  const closeNutritionDetails = useCallback(() => {
+    journalHaptics.selection();
+    nutritionSheetRef.current?.close();
+  }, []);
+  const handleOpenSourceUrl = useCallback(async (url) => {
+    if (!url) return;
+
+    try {
+      const supported = await Linking.canOpenURL(url);
+      if (!supported) {
+        return;
+      }
+
+      journalHaptics.selection();
+      await Linking.openURL(url);
+    } catch (error) {
+      console.warn("[nutrition] could not open source url:", error?.message);
+    }
   }, []);
 
   const markedDates = useMemo(() => {
@@ -673,7 +947,12 @@ export default function Index() {
       <View style={[styles.header, { paddingTop: insets.top + WEB_TOP_INSET + 10 }]}>
         {/* Left column — fixed width to match right */}
         <View style={styles.headerSide}>
-          <Text style={styles.logo}>🥗</Text>
+          <Image
+            source={HEADER_DOG_ICON}
+            style={styles.logoImage}
+            resizeMode="contain"
+            accessibilityLabel="Icone do NutriPal"
+          />
         </View>
 
         {/* Center: Date pill — true center via flex */}
@@ -687,33 +966,43 @@ export default function Index() {
 
         {/* Right column — fixed width to match left */}
         <View style={styles.headerSideRight}>
-          <TouchableOpacity onPress={openSettings} activeOpacity={0.7}>
-            <GlassView isInteractive style={[styles.rightPill, glass("rgba(255,255,255,0.10)")]}>
-              <Text style={styles.streakText}>🔥</Text>
-              <Text style={[styles.streakCount, { color: C.textPrimary }]}>1</Text>
-              <View style={styles.pillDivider} />
-              {isThinking ? (
-                <Text style={styles.thinkingText}>Thinking...</Text>
-              ) : Platform.OS === "ios" ? (
-                <SymbolView
-                  name="gear"
-                  style={styles.gearSymbol}
-                  type="monochrome"
-                  tintColor={C.textSecondary}
-                />
-              ) : (
-                <Text style={[styles.gearIcon, { color: C.textSecondary }]}>⚙</Text>
-              )}
-            </GlassView>
-          </TouchableOpacity>
+          <View style={styles.headerActions}>
+            <GlassIconButton
+              onPress={openAiAssistant}
+              accessibilityLabel="Abrir assistente de IA"
+              symbolName="sparkles"
+              fallbackIconName="sparkles-outline"
+              color={C.accentBlue}
+              size={38}
+              iconSize={17}
+            />
+
+            <TouchableOpacity onPress={openSettings} activeOpacity={0.7}>
+              <GlassView isInteractive style={[styles.rightPill, glass("rgba(255,255,255,0.10)")]}>
+                <Text style={styles.streakText}>🔥</Text>
+                <Text style={[styles.streakCount, { color: C.textPrimary }]}>1</Text>
+                <View style={styles.pillDivider} />
+                {Platform.OS === "ios" ? (
+                  <SymbolView
+                    name="gear"
+                    style={styles.gearSymbol}
+                    type="monochrome"
+                    tintColor={C.textSecondary}
+                  />
+                ) : (
+                  <Text style={[styles.gearIcon, { color: C.textSecondary }]}>⚙</Text>
+                )}
+              </GlassView>
+            </TouchableOpacity>
+          </View>
         </View>
       </View>
 
       {/* ── Content ─────────────────────────────────────────────────────── */}
-      <KeyboardAvoidingView
-        style={styles.flex}
-        behavior={Platform.OS === "ios" ? "padding" : "height"}
-        keyboardVerticalOffset={0}
+        <KeyboardAvoidingView
+          style={styles.flex}
+          behavior={Platform.OS === "ios" ? "padding" : "height"}
+          keyboardVerticalOffset={0}
       >
         {/* ── 3-page horizontal day swiper ────────────────────────────── */}
         <FlatList
@@ -724,21 +1013,27 @@ export default function Index() {
           scrollEventThrottle={16}
           scrollEnabled={!keyboardVisible}
           onMomentumScrollEnd={handleDaySwipe}
-          keyboardShouldPersistTaps="handled"
+          keyboardShouldPersistTaps="always"
           style={styles.flex}
           data={[prevDate, selectedDate, nextDate]}
           keyExtractor={(date) => date}
           initialScrollIndex={1}
           getItemLayout={(_, index) => ({ length: width, offset: width * index, index })}
-          renderItem={({ item: date, index: idx }) => {
-            const isActive = idx === 1;
-            const dayEntries = isActive ? entries : getEntriesForDate(date);
-            return (
+              renderItem={({ item: date, index: idx }) => {
+                const isActive = idx === 1;
+                const dayEntries = isActive ? entries : getEntriesForDate(date);
+                const dayJournal = isActive ? journal : getJournalForDate(date);
+                const dayText = isActive ? text : (dayJournal.rawText ?? "");
+                const dayLineInsights = isActive
+                  ? lineInsights
+                  : buildAllLineInsights(dayText, dayJournal);
+                const hasJournalContent = Boolean(dayText.trim());
+                return (
               <ScrollView
                 ref={isActive ? scrollRef : null}
                 style={{ width }}
                 contentContainerStyle={styles.scrollContent}
-                keyboardShouldPersistTaps="handled"
+                keyboardShouldPersistTaps="always"
                 showsVerticalScrollIndicator={false}
               >
                 {/* Listening badge — active page only */}
@@ -756,118 +1051,198 @@ export default function Index() {
 
                 {/* ── Entries always rendered (notebook page) ──────────── */}
                 {dayEntries.map((entry) => (
-                  <MealEntryCard key={entry.id} entry={entry} onDelete={isActive ? removeEntry : undefined} onEdit={isActive ? editEntry : undefined} onEditingChange={isActive ? handleCardEditingChange : undefined} />
+                  <MealEntryCard
+                    key={entry.id}
+                    entry={entry}
+                    onDelete={isActive ? handleRemoveEntry : undefined}
+                  />
                 ))}
 
-                {/* Inactive day empty state */}
-                {!isActive && dayEntries.length === 0 && (
-                  <Text style={[styles.placeholder, { color: C.textSecondary }]}>Sem registros neste dia.</Text>
-                )}
-
-                {/* ── Input block — always visible on active day ────────── */}
-                {isActive && (
-                  isEditing ? (
-                    <View style={styles.inlineInputBlock}>
-                      <TextInput
-                        ref={inputRef}
-                        value={text}
-                        onChangeText={handleTextChange}
-                        placeholder={
-                          dayEntries.length === 0
-                            ? "O que você comeu?..."
-                            : "Continuar a anotar..."
-                        }
-                        placeholderTextColor={C.textTertiary}
-                        style={[styles.inlineInput, { color: C.textPrimary }]}
-                        multiline
-                        autoFocus
-                        blurOnSubmit={false}
-                      />
-                      {isAnalyzing && (
-                        <Text style={[styles.liveAnalysisHint, { color: C.textTertiary }]}>analisando…</Text>
-                      )}
-                      {!isAnalyzing && liveAnalysis && liveAnalysis.totals?.calories > 0 && (
-                        <View style={styles.liveAnalysisRow}>
-                          <Text style={[styles.liveAnalysisKcal, { color: C.textSecondary }]}>
-                            {Math.round(liveAnalysis.totals.calories)} kcal
-                          </Text>
-                          {liveAnalysis.items?.length > 0 && (
-                            <Text style={[styles.liveAnalysisItems, { color: C.textTertiary }]}>
-                              {liveAnalysis.items.map((it) => it.name).join(" · ")}
-                            </Text>
-                          )}
-                        </View>
-                      )}
-                    </View>
-                  ) : (
-                    <TouchableOpacity
-                      onPress={handleStartEditing}
-                      style={styles.writingPromptArea}
-                      activeOpacity={0.5}
+                    <Pressable
+                      style={[
+                        styles.noteSection,
+                        isActive ? styles.noteSectionInteractive : null,
+                      ]}
+                      onPress={isActive ? handleStartEditing : undefined}
+                      disabled={!isActive || isEditing}
                     >
-                      <Text
-                        style={[
-                          dayEntries.length === 0 ? styles.placeholder : styles.continuePrompt,
-                          { color: C.textSecondary },
-                        ]}
-                      >
-                        {dayEntries.length === 0
-                          ? "O que você comeu?..."
-                          : "Continuar a anotar..."}
-                      </Text>
-                    </TouchableOpacity>
-                  )
-                )}
+                      {isActive && (isEditing || !hasJournalContent) ? (
+                        <View style={styles.inlineComposer}>
+                            <View style={styles.paragraphsContainer}>
+                              {hasJournalContent ? (() => {
+                                const insightMap = new Map(dayLineInsights.map((i) => [i.lineIndex, i]));
+                                return splitJournalLines(dayText).map((line) => (
+                                  <View key={line.lineIndex} style={pS.paragraphRow}>
+                                    <View style={pS.paragraphTextTouch}>
+                                      <Text
+                                        style={[
+                                          pS.paragraphText,
+                                          {
+                                            color: line.sourceText.length ? C.textPrimary : "transparent",
+                                          },
+                                        ]}
+                                      >
+                                        {line.rawText || " "}
+                                      </Text>
+                                    </View>
+                                    <View style={pS.badgeSlot}>
+                                      <AnnotationBadge
+                                        insight={insightMap.get(line.lineIndex)}
+                                        onPressSources={openNutritionDetails}
+                                      />
+                                    </View>
+                                  </View>
+                                ));
+                              })() : null}
+                            </View>
+
+                            <TextInput
+                              ref={inputRef}
+                              value={text}
+                              onChangeText={handleTextChange}
+                              onFocus={handleInputFocus}
+                              onBlur={handleInputBlur}
+                              placeholder="O que você comeu?"
+                              placeholderTextColor={C.textTertiary}
+                              style={[
+                                styles.inlineComposerInput,
+                                !hasJournalContent ? styles.inlineComposerInputWide : null,
+                                {
+                                  color: hasJournalContent ? "transparent" : C.textPrimary,
+                                },
+                              ]}
+                              multiline
+                              blurOnSubmit={false}
+                              scrollEnabled={false}
+                              underlineColorAndroid="transparent"
+                              selectionColor={C.accentBlue}
+                              cursorColor={C.textPrimary}
+                              textAlignVertical="top"
+                            />
+                          </View>
+                        ) : false ? (
+                          <TextInput
+                            ref={inputRef}
+                            value={text}
+                            onChangeText={handleTextChange}
+                            onFocus={handleInputFocus}
+                            onBlur={handleInputBlur}
+                            placeholder="O que você comeu?"
+                            placeholderTextColor={C.textTertiary}
+                            style={[styles.inlineInput, { color: C.textPrimary }]}
+                            multiline
+                            blurOnSubmit={false}
+                            scrollEnabled={false}
+                            underlineColorAndroid="transparent"
+                            selectionColor={C.accentBlue}
+                            cursorColor={C.textPrimary}
+                            textAlignVertical="top"
+                          />
+                        )
+                      : hasJournalContent ? (
+                        <View style={styles.paragraphsContainer}>
+                          {(() => {
+                            const insightMap = new Map(dayLineInsights.map((i) => [i.lineIndex, i]));
+                            return splitJournalLines(dayText).map((line) => {
+                              return (
+                                <View key={line.lineIndex} style={pS.paragraphRow}>
+                                  <TouchableOpacity
+                                    onPress={isActive ? handleStartEditing : undefined}
+                                    activeOpacity={isActive ? 0.85 : 1}
+                                    disabled={!isActive}
+                                    style={pS.paragraphTextTouch}
+                                  >
+                                    <Text
+                                      style={[
+                                        pS.paragraphText,
+                                        {
+                                          color: line.sourceText.length ? C.textPrimary : "transparent",
+                                        },
+                                      ]}
+                                    >
+                                      {line.rawText || " "}
+                                    </Text>
+                                  </TouchableOpacity>
+                                  <View style={pS.badgeSlot}>
+                                    <AnnotationBadge
+                                      insight={insightMap.get(line.lineIndex)}
+                                      onPressSources={openNutritionDetails}
+                                    />
+                                  </View>
+                                </View>
+                              );
+                            });
+                          })()}
+                        </View>
+                      ) : null}
+                    </Pressable>
+
+                {!isActive && !hasJournalContent && dayEntries.length === 0 ? (
+                  <Text style={[styles.placeholder, { color: C.textSecondary }]}>Sem registros neste dia.</Text>
+                ) : null}
               </ScrollView>
             );
           }}
         />
 
-        {/* ── Bottom area: GoalsPanel + ActionBar pinned to bottom ─────── */}
-        {(() => {
-          const anyEditing = isEditing || cardIsEditing;
-          return (
-            <View style={[
-              styles.bottomContainer,
-              {
-                bottom: keyboardVisible && anyEditing
-                  ? keyboardHeight
-                  : insets.bottom + WEB_BOTTOM_INSET,
-                paddingBottom: keyboardVisible && anyEditing ? 0 : undefined,
-              },
-            ]}>
-              <AnimatePresence>
-                {goalsExpanded && !(keyboardVisible && anyEditing) && (
-                  <MotiView
-                    from={{ opacity: 0, translateY: 20, scale: 0.97 }}
-                    animate={{ opacity: 1, translateY: 0, scale: 1 }}
-                    exit={{ opacity: 0, translateY: 12, scale: 0.98 }}
-                    transition={{
-                      type: "spring",
-                      damping: 20,
-                      stiffness: 180,
-                      mass: 0.8,
-                    }}
-                  >
-                    <GoalsPanel totals={totals} />
-                  </MotiView>
-                )}
-              </AnimatePresence>
+        {!isEditing && goalsExpanded ? (
+          <TouchableOpacity
+            activeOpacity={1}
+            onPress={handleCloseGoals}
+            style={styles.goalsDismissOverlay}
+            accessibilityRole="button"
+            accessibilityLabel="Fechar painel de metas"
+          />
+        ) : null}
 
-              <ActionBar
+        <View
+          style={[
+            styles.bottomContainer,
+            {
+              bottom: keyboardVisible && isEditing
+                ? keyboardHeight
+                : insets.bottom + WEB_BOTTOM_INSET,
+              paddingBottom: keyboardVisible && isEditing ? 0 : undefined,
+            },
+          ]}
+          >
+            <AnimatePresence>
+              {!isEditing && goalsExpanded ? (
+                <MotiView
+                  style={styles.bottomGoalsPanel}
+                  from={{ opacity: 0, translateY: 12, scale: 0.98 }}
+                  animate={{ opacity: 1, translateY: 0, scale: 1 }}
+                  exit={{ opacity: 0, translateY: 12, scale: 0.98 }}
+                  transition={{
+                    type: "spring",
+                    damping: 18,
+                    stiffness: 180,
+                    mass: 0.8,
+                  }}
+                >
+                  <GoalsPanel totals={totals} />
+                </MotiView>
+              ) : null}
+            </AnimatePresence>
+
+            {!isEditing ? (
+              <JournalSummaryBar
                 totals={totals}
-                isEditing={anyEditing}
-                isListening={isListening}
                 goalsExpanded={goalsExpanded}
                 onToggleGoals={handleToggleGoals}
-                onToggleMic={handleToggleMic}
-                onOpenCamera={handleOpenCamera}
-                onAddSavedMeal={handleAddSavedMeal}
-                onDismissKeyboard={handleDismissKeyboard}
               />
-            </View>
-          );
-        })()}
+            ) : null}
+
+            <ActionBar
+              totals={totals}
+              isEditing={isEditing}
+            isListening={isListening}
+            onToggleMic={handleToggleMic}
+            onOpenCamera={handleOpenCamera}
+            onAddSavedMeal={handleAddSavedMeal}
+            onDismissKeyboard={handleDismissKeyboard}
+          />
+        </View>
       </KeyboardAvoidingView>
 
       {/* ── Camera context menu ────────────────────────────────────────── */}
@@ -1015,9 +1390,13 @@ export default function Index() {
             {/* Header */}
             <View style={sS.header}>
               <Text style={[sS.title, { color: C.textPrimary }]}>Settings</Text>
-              <TouchableOpacity onPress={closeSettings} activeOpacity={0.7} style={sS.closeBtn}>
-                <Text style={[sS.closeBtnText, { color: C.textSecondary }]}>✕</Text>
-              </TouchableOpacity>
+              <GlassIconButton
+                onPress={closeSettings}
+                accessibilityLabel="Fechar ajustes"
+                symbolName="xmark"
+                fallbackIconName="close"
+                color={C.textSecondary}
+              />
             </View>
 
             {/* Profile */}
@@ -1070,7 +1449,7 @@ export default function Index() {
                 badge="🍽️" badgeColor="#f97316" sfName="fork.knife"
                 label="Manage Saved Meals"
                 sublabel={savedMealsLabel}
-                onPress={() => setSettingsView("savedMeals")} isLast
+                onPress={openSavedMealsManager} isLast
               />
             </Card>
 
@@ -1134,6 +1513,132 @@ export default function Index() {
           </BottomSheetScrollView>
       </BottomSheet>
 
+      <BottomSheet
+        ref={nutritionSheetRef}
+        index={-1}
+        snapPoints={["82%"]}
+        enablePanDownToClose
+        onClose={() => setSelectedNutritionDetail(null)}
+        backgroundStyle={{ backgroundColor: C.bgSecondary, borderTopLeftRadius: radius.xl, borderTopRightRadius: radius.xl }}
+        handleIndicatorStyle={{ backgroundColor: C.systemGray3 }}
+      >
+        <BottomSheetScrollView contentContainerStyle={[styles.nutritionSheetContent, { paddingBottom: insets.bottom + 40 }]}>
+          <View style={styles.nutritionHeader}>
+            <Text style={[styles.nutritionHeaderTitle, { color: C.textSecondary }]}>Nutrition Details</Text>
+            <GlassIconButton
+              onPress={closeNutritionDetails}
+              accessibilityLabel="Fechar detalhes nutricionais"
+              symbolName="xmark"
+              fallbackIconName="close"
+              color={C.textSecondary}
+            />
+          </View>
+
+          <Text style={[styles.nutritionSourceText, { color: C.textPrimary }]}>
+            {selectedNutritionDetail?.sourceText ?? "No item selected"}
+          </Text>
+
+          <View style={[styles.nutritionSummaryCard, { backgroundColor: C.bgPrimary, borderColor: C.separator }]}>
+            <View style={styles.nutritionCaloriesBlock}>
+              <Text style={[styles.nutritionCaloriesValue, { color: C.textPrimary }]}>
+                {Math.round(selectedNutritionDetail?.totals?.calories ?? 0)}
+              </Text>
+              <Text style={[styles.nutritionCaloriesLabel, { color: C.textSecondary }]}>total calories</Text>
+            </View>
+
+            <View style={styles.nutritionMacroRow}>
+              <View style={styles.nutritionMacroStat}>
+                <Text style={[styles.nutritionMacroValue, { color: C.textPrimary }]}>
+                  {Math.round(selectedNutritionDetail?.totals?.protein_g ?? 0)} g
+                </Text>
+                <Text style={[styles.nutritionMacroLabel, { color: C.protein }]}>Protein</Text>
+              </View>
+              <View style={styles.nutritionMacroStat}>
+                <Text style={[styles.nutritionMacroValue, { color: C.textPrimary }]}>
+                  {Math.round(selectedNutritionDetail?.totals?.carbs_g ?? 0)} g
+                </Text>
+                <Text style={[styles.nutritionMacroLabel, { color: C.carbs }]}>Carbs</Text>
+              </View>
+              <View style={styles.nutritionMacroStat}>
+                <Text style={[styles.nutritionMacroValue, { color: C.textPrimary }]}>
+                  {Math.round(selectedNutritionDetail?.totals?.fat_g ?? 0)} g
+                </Text>
+                <Text style={[styles.nutritionMacroLabel, { color: C.fat }]}>Fat</Text>
+              </View>
+            </View>
+          </View>
+
+          <Text style={[styles.nutritionSectionTitle, { color: C.textSecondary }]}>Items</Text>
+          <View style={styles.nutritionItemsList}>
+            {(selectedNutritionDetail?.items?.length
+              ? selectedNutritionDetail.items
+              : [{ name: selectedNutritionDetail?.sourceText ?? "", calories: selectedNutritionDetail?.totals?.calories ?? 0 }]).map((item, index) => (
+                <View
+                  key={`${item.name}-${index}`}
+                  style={[styles.nutritionItemCard, { backgroundColor: C.bgPrimary, borderColor: C.separator }]}
+                >
+                  <View style={styles.nutritionItemHeader}>
+                    <Text style={[styles.nutritionItemName, { color: C.textPrimary }]}>{item.name}</Text>
+                    <Text style={[styles.nutritionItemCalories, { color: C.textSecondary }]}>
+                      {Math.round(item.calories ?? 0)} cal
+                    </Text>
+                  </View>
+                  {item.quantityDescription ? (
+                    <Text style={[styles.nutritionItemMeta, { color: C.textSecondary }]}>
+                      {item.quantityDescription}
+                    </Text>
+                  ) : null}
+                  {item.matchedOfficialName ? (
+                    <Text style={[styles.nutritionItemSource, { color: C.textTertiary }]}>
+                      {item.matchedOfficialName}
+                    </Text>
+                  ) : null}
+                </View>
+              ))}
+          </View>
+
+          {selectedNutritionDetail?.sources?.length ? (
+            <>
+              <Text style={[styles.nutritionSectionTitle, { color: C.textSecondary }]}>Sources</Text>
+              <View style={styles.nutritionSourceList}>
+                {selectedNutritionDetail.sources.map((source, index) => (
+                  <TouchableOpacity
+                    key={`${source.url}-${index}`}
+                    activeOpacity={0.75}
+                    onPress={() => handleOpenSourceUrl(source.url)}
+                    style={[styles.nutritionSourceCard, { backgroundColor: C.bgPrimary, borderColor: C.separator }]}
+                  >
+                    <Text style={[styles.nutritionSourceLabel, { color: C.accentBlue }]}>
+                      {source.label}
+                    </Text>
+                    <Text style={[styles.nutritionSourceName, { color: C.textPrimary }]}>
+                      {source.matchName}
+                    </Text>
+                    <Text
+                      style={[styles.nutritionSourceUrl, { color: C.textTertiary }]}
+                      numberOfLines={1}
+                    >
+                      {source.url}
+                    </Text>
+                  </TouchableOpacity>
+                ))}
+              </View>
+            </>
+          ) : null}
+
+          {selectedNutritionDetail?.reasoning ? (
+            <>
+              <Text style={[styles.nutritionSectionTitle, { color: C.textSecondary }]}>Resolution notes</Text>
+              <View style={[styles.nutritionReasoningCard, { backgroundColor: C.bgPrimary, borderColor: C.separator }]}>
+                <Text style={[styles.nutritionReasoningText, { color: C.textPrimary }]}>
+                  {selectedNutritionDetail.reasoning}
+                </Text>
+              </View>
+            </>
+          ) : null}
+        </BottomSheetScrollView>
+      </BottomSheet>
+
       <Modal
         animationType="slide"
         transparent
@@ -1143,21 +1648,21 @@ export default function Index() {
         <View style={styles.modalBackdrop}>
           <GlassView isInteractive={false} style={[styles.modalCard, styles.managerCard, glass("rgba(255,255,255,0.09)")]}>
             <View style={styles.managerHeader}>
-              <TouchableOpacity
+              <GlassIconButton
                 onPress={() => setSettingsView("main")}
-                activeOpacity={0.8}
-                style={styles.managerHeaderBtn}
-              >
-                <Text style={[styles.managerHeaderBtnText, { color: C.textSecondary }]}>‹</Text>
-              </TouchableOpacity>
+                accessibilityLabel="Voltar para ajustes"
+                symbolName="chevron.left"
+                fallbackIconName="chevron-back"
+                color={C.textSecondary}
+              />
               <Text style={[styles.managerTitle, { color: C.textPrimary }]}>Saved Meals</Text>
-              <TouchableOpacity
+              <GlassIconButton
                 onPress={() => setSettingsView("main")}
-                activeOpacity={0.8}
-                style={styles.managerHeaderBtn}
-              >
-                <Text style={[styles.managerHeaderBtnText, { color: C.textSecondary }]}>✕</Text>
-              </TouchableOpacity>
+                accessibilityLabel="Fechar refeicoes salvas"
+                symbolName="xmark"
+                fallbackIconName="close"
+                color={C.textSecondary}
+              />
             </View>
 
             <ScrollView
@@ -1177,13 +1682,16 @@ export default function Index() {
                   <GlassView isInteractive key={meal.id} style={[styles.savedMealCard, glass("rgba(255,255,255,0.06)")]}>
                     <View style={styles.savedMealHeader}>
                       <Text style={[styles.savedMealName, { color: C.textPrimary }]}>{meal.name}</Text>
-                      <TouchableOpacity
+                      <GlassIconButton
                         onPress={() => handleDeleteSavedMeal(meal)}
-                        activeOpacity={0.8}
-                        style={styles.deleteBtn}
-                      >
-                        <Text style={styles.deleteBtnText}>✕</Text>
-                      </TouchableOpacity>
+                        accessibilityLabel={`Remover ${meal.name}`}
+                        symbolName="xmark"
+                        fallbackIconName="close"
+                        tone="destructive"
+                        color={C.accentRed}
+                        size={30}
+                        iconSize={14}
+                      />
                     </View>
                     <Text style={[styles.savedMealMacros, { color: C.textSecondary }]}>
                       🔥 {Math.round(meal.calories)} cal · P {Math.round(meal.protein_g)}g ·
@@ -1269,6 +1777,12 @@ const styles = StyleSheet.create({
     left: 0,
     right: 0,
   },
+  goalsDismissOverlay: {
+    ...StyleSheet.absoluteFillObject,
+  },
+  bottomGoalsPanel: {
+    paddingBottom: spacing.xs,
+  },
 
   /* Header */
   header: {
@@ -1280,7 +1794,15 @@ const styles = StyleSheet.create({
   headerSide: { flex: 1 },
   headerCenter: { flex: 1, alignItems: "center" },
   headerSideRight: { flex: 1, alignItems: "flex-end" },
-  logo: { fontSize: 28 },
+  headerActions: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: spacing.sm,
+  },
+  logoImage: {
+    width: 54,
+    height: 42,
+  },
   datePillCenter: {
     position: "absolute",
     left: 0,
@@ -1319,59 +1841,58 @@ const styles = StyleSheet.create({
   },
   gearIcon:   { fontSize: 15, color: colors.textSecondary },
   gearSymbol: { width: 16, height: 16 },
-  thinkingText: { fontSize: 12, color: colors.accentBlue, fontWeight: "500", letterSpacing: -0.1 },
 
-  /* Scroll — extra paddingBottom clears the absolute bottom bar */
   scrollContent: {
     paddingHorizontal: spacing.xl,
     paddingTop: spacing.lg,
-    paddingBottom: 200,
+    paddingBottom: 120,
     flexGrow: 1,
   },
-
-  /* Inline input block — wraps TextInput + live analysis annotation */
-  inlineInputBlock: {
+  noteSection: {
     paddingTop: spacing.lg,
   },
-
-  /* Inline input — transparent, note-like, sits below entries */
+  noteSectionInteractive: {
+    flexGrow: 1,
+  },
   inlineInput: {
     ...typography.body,
     color: "rgba(255,255,255,0.90)",
-    minHeight: 48,
+    minHeight: 88,
     textAlignVertical: "top",
     paddingTop: 0,
+    paddingBottom: spacing.sm,
+    paddingHorizontal: 0,
+    margin: 0,
     letterSpacing: -0.3,
     lineHeight: 26,
   },
-
-  /* Live analysis annotation row */
-  liveAnalysisRow: {
-    flexDirection: "row",
-    alignItems: "baseline",
-    gap: spacing.xs,
-    marginTop: spacing.xs,
-    paddingBottom: spacing.xs,
+  inlineComposer: {
+    position: "relative",
+    minHeight: 88,
   },
-  liveAnalysisKcal: {
-    fontSize: 12,
-    fontWeight: "600",
-    letterSpacing: -0.1,
+  inlineComposerInput: {
+    ...typography.body,
+    position: "absolute",
+    top: 0,
+    left: 0,
+    right: INLINE_BADGE_WIDTH + spacing.md,
+    bottom: 0,
+    minHeight: 88,
+    textAlignVertical: "top",
+    paddingTop: 0,
+    paddingBottom: 0,
+    paddingHorizontal: 0,
+    margin: 0,
+    letterSpacing: -0.3,
+    lineHeight: 26,
+    backgroundColor: "transparent",
   },
-  liveAnalysisItems: {
-    fontSize: 12,
-    flex: 1,
-    flexWrap: "wrap",
-    letterSpacing: -0.1,
+  inlineComposerInputWide: {
+    right: 0,
   },
-  liveAnalysisHint: {
-    fontSize: 12,
-    fontStyle: "italic",
-    marginTop: spacing.xs,
-    letterSpacing: 0.3,
+  paragraphsContainer: {
+    minHeight: 88,
   },
-
-  /* Placeholder — subtle notebook opening prompt */
   placeholder: {
     ...typography.body,
     color: colors.systemGray3,
@@ -1379,20 +1900,6 @@ const styles = StyleSheet.create({
     lineHeight: 26,
     letterSpacing: -0.3,
   },
-
-  /* Writing prompt shown below entries when keyboard is closed */
-  writingPromptArea: {
-    paddingTop: spacing.lg,
-    paddingBottom: spacing.xl,
-    minHeight: 64,
-  },
-  continuePrompt: {
-    fontSize: 15,
-    color: colors.systemGray4,
-    letterSpacing: -0.2,
-    fontStyle: "italic",
-  },
-
   /* Listening indicator */
   listeningBadge: {
     flexDirection: "row",
@@ -1436,6 +1943,129 @@ const styles = StyleSheet.create({
 
   /* Settings sheet */
   settingsContent: { paddingHorizontal: spacing.xl, paddingTop: spacing.sm },
+  nutritionSheetContent: {
+    paddingHorizontal: spacing.xl,
+    paddingTop: spacing.sm,
+    gap: spacing.lg,
+  },
+  nutritionHeader: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+  },
+  nutritionHeaderTitle: {
+    ...typography.subhead,
+    fontWeight: "600",
+  },
+  nutritionSourceText: {
+    ...typography.title2,
+    fontWeight: "700",
+    letterSpacing: -0.5,
+    marginTop: spacing.sm,
+  },
+  nutritionSummaryCard: {
+    borderRadius: radius.xl,
+    borderWidth: 1,
+    paddingHorizontal: spacing.xl,
+    paddingVertical: spacing.lg,
+    gap: spacing.lg,
+  },
+  nutritionCaloriesBlock: {
+    alignItems: "center",
+    gap: spacing.xs,
+  },
+  nutritionCaloriesValue: {
+    fontSize: 40,
+    fontWeight: "700",
+    letterSpacing: -1.2,
+  },
+  nutritionCaloriesLabel: {
+    ...typography.footnote,
+  },
+  nutritionMacroRow: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    gap: spacing.md,
+  },
+  nutritionMacroStat: {
+    flex: 1,
+    alignItems: "center",
+    gap: 2,
+  },
+  nutritionMacroValue: {
+    ...typography.headline,
+    fontWeight: "700",
+  },
+  nutritionMacroLabel: {
+    ...typography.caption1,
+    fontWeight: "600",
+  },
+  nutritionSectionTitle: {
+    ...typography.subhead,
+    fontWeight: "600",
+    marginBottom: spacing.sm,
+  },
+  nutritionItemsList: {
+    gap: spacing.sm,
+  },
+  nutritionItemCard: {
+    borderRadius: radius.lg,
+    borderWidth: 1,
+    paddingHorizontal: spacing.md + 2,
+    paddingVertical: spacing.md,
+    gap: spacing.xs,
+  },
+  nutritionItemHeader: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    gap: spacing.md,
+  },
+  nutritionItemName: {
+    ...typography.subhead,
+    flex: 1,
+  },
+  nutritionItemCalories: {
+    ...typography.footnote,
+    fontWeight: "600",
+  },
+  nutritionItemMeta: {
+    ...typography.footnote,
+  },
+  nutritionItemSource: {
+    ...typography.caption1,
+    lineHeight: 18,
+  },
+  nutritionSourceList: {
+    gap: spacing.sm,
+  },
+  nutritionSourceCard: {
+    borderRadius: radius.lg,
+    borderWidth: 1,
+    paddingHorizontal: spacing.md + 2,
+    paddingVertical: spacing.md,
+    gap: spacing.xs,
+  },
+  nutritionSourceLabel: {
+    ...typography.caption1,
+    fontWeight: "700",
+  },
+  nutritionSourceName: {
+    ...typography.subhead,
+  },
+  nutritionSourceUrl: {
+    ...typography.caption1,
+  },
+  nutritionReasoningCard: {
+    borderRadius: radius.lg,
+    borderWidth: 1,
+    paddingHorizontal: spacing.md + 2,
+    paddingVertical: spacing.md,
+  },
+  nutritionReasoningText: {
+    ...typography.footnote,
+    lineHeight: 20,
+  },
 
   modalBackdrop: {
     flex: 1,
@@ -1460,19 +2090,6 @@ const styles = StyleSheet.create({
     alignItems: "center",
     justifyContent: "space-between",
     marginBottom: spacing.lg,
-  },
-  managerHeaderBtn: {
-    width: 32,
-    height: 32,
-    borderRadius: 16,
-    backgroundColor: "rgba(255,255,255,0.08)",
-    alignItems: "center",
-    justifyContent: "center",
-  },
-  managerHeaderBtnText: {
-    fontSize: 16,
-    color: colors.textSecondary,
-    fontWeight: "600",
   },
   managerTitle: {
     ...typography.title3,
@@ -1526,19 +2143,6 @@ const styles = StyleSheet.create({
     ...typography.caption1,
     color: colors.systemGray3,
     marginTop: spacing.xs,
-  },
-  deleteBtn: {
-    width: 30,
-    height: 30,
-    borderRadius: 15,
-    alignItems: "center",
-    justifyContent: "center",
-    backgroundColor: "rgba(239,68,68,0.14)",
-  },
-  deleteBtnText: {
-    fontSize: 13,
-    color: colors.accentRed,
-    fontWeight: "700",
   },
   modalTitle: {
     ...typography.title3,
@@ -1648,12 +2252,6 @@ const sS = StyleSheet.create({
     paddingBottom: spacing.xl,
   },
   title: { fontSize: 22, fontWeight: "700", letterSpacing: 0.35, color: "#f5f5f5" },
-  closeBtn: {
-    width: 30, height: 30, borderRadius: 15,
-    alignItems: "center", justifyContent: "center",
-    backgroundColor: "rgba(255,255,255,0.08)",
-  },
-  closeBtnText: { fontSize: 14, fontWeight: "500", lineHeight: 18, color: "#8e8e93" },
 
   /* Section label */
   sectionTitle: {
@@ -1690,8 +2288,7 @@ const sS = StyleSheet.create({
 
   /* iOS-style icon badge — colored rounded square */
   iconBadge: {
-    width: 32, height: 32,
-    borderRadius: 8,
+    width: 24, height: 24,
     alignItems: "center",
     justifyContent: "center",
     flexShrink: 0,
@@ -1704,7 +2301,7 @@ const sS = StyleSheet.create({
     overflow: "hidden",
     flexShrink: 0,
   },
-  badgeIcon: { fontSize: 17, lineHeight: 22 },
+  badgeIcon: { fontSize: 18, lineHeight: 20 },
 
   /* Appearance segmented control */
   segmentedControl: {
@@ -1731,4 +2328,55 @@ const sS = StyleSheet.create({
   },
   segLabel: { fontSize: 13, fontWeight: "500", color: "rgba(255,255,255,0.55)" },
   segLabelActive: { color: "#ffffff", fontWeight: "600" },
+});
+
+/* ── paragraph + inline annotation styles ─────────────────────────────────── */
+const pS = StyleSheet.create({
+  paragraphRow: {
+    flexDirection: "row",
+    alignItems: "flex-start",
+    gap: spacing.md,
+    minHeight: 26,
+  },
+  paragraphTextTouch: {
+    flex: 1,
+  },
+  paragraphText: {
+    ...typography.body,
+    lineHeight: 26,
+    letterSpacing: -0.3,
+  },
+  badgeSlot: {
+    width: INLINE_BADGE_WIDTH,
+    alignItems: "flex-end",
+  },
+  badge: {
+    width: "100%",
+    alignItems: "flex-end",
+    paddingTop: 2,
+  },
+  badgeStack: {
+    alignItems: "flex-end",
+    gap: 2,
+  },
+  calText: {
+    ...typography.footnote,
+    fontWeight: "600",
+    letterSpacing: -0.1,
+  },
+  sourcesRow: {
+    flexDirection: "row",
+    alignItems: "center",
+  },
+  sourcesText: {
+    ...typography.caption1,
+    fontWeight: "600",
+    letterSpacing: -0.1,
+  },
+  errorText: {
+    ...typography.footnote,
+    fontWeight: "600",
+    fontStyle: "italic",
+    letterSpacing: -0.08,
+  },
 });

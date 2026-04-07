@@ -14,6 +14,7 @@ export default function RootLayout() {
     <GestureHandlerRootView style={{ flex: 1 }}>
       <Stack screenOptions={{ headerShown: false }} initialRouteName="index">
         <Stack.Screen name="index" />
+        <Stack.Screen name="ai" />
       </Stack>
     </GestureHandlerRootView>
   );

@@ -1,0 +1,31 @@
+﻿**********************
+Início da transcrição do Windows PowerShell
+Hora de início: 20260406155107
+Nome de Usuário: PDRO\pedro
+Executar como Usuário: PDRO\pedro
+Nome da Configuração: 
+Computador: PDRO (Microsoft Windows NT 10.0.22631.0)
+Aplicativo Host: C:\WINDOWS\System32\WindowsPowerShell\v1.0\powershell.exe -NoExit -Command Set-Location 'D:\NutriPal\mobile'; Start-Transcript -Path 'D:\NutriPal\mobile\.expo-tunnel-5000.log' -Force; npx.cmd expo start --go --tunnel --port 5000 --clear; Stop-Transcript
+ID do Processo: 25824
+PSVersion: 5.1.22621.6133
+PSEdition: Desktop
+PSCompatibleVersions: 1.0, 2.0, 3.0, 4.0, 5.0, 5.1.22621.6133
+BuildVersion: 10.0.22621.6133
+CLRVersion: 4.0.30319.42000
+WSManStackVersion: 3.0
+PSRemotingProtocolVersion: 2.3
+SerializationVersion: 1.1.0.1
+**********************
+Transcrição iniciada, o arquivo de saída é D:\NutriPal\mobile\.expo-tunnel-5000.log
+env: load .env
+env: export EXPO_PUBLIC_APP_URL EXPO_PUBLIC_BASE_CREATE_USER_CONTENT_URL EXPO_PUBLIC_BASE_URL EXPO_PUBLIC_CREATE_ENV EXP
+O_PUBLIC_HOST EXPO_PUBLIC_PROJECT_GROUP_ID
+Starting project at D:\NutriPal\mobile
+Using src/app as the root directory for Expo Router.
+Starting Metro Bundler
+warning: Bundler cache is empty, rebuilding (this may take a minute)
+CommandError: ngrok tunnel took too long to connect.
+**********************
+Fim da transcrição do Windows PowerShell
+Hora de término: 20260406155212
+**********************

@@ -1,22 +1,41 @@
-/**
- * AI configuration layer.
- *
- * Set EXPO_PUBLIC_GEMINI_API_KEY in your .env (or Replit secrets) to enable
- * real Gemini analysis.  Without a key the app falls back to the built-in
- * local nutrition estimator — everything still works.
- */
+import Constants from "expo-constants";
+import { Platform } from "react-native";
+
+function inferAiApiBaseUrl() {
+  const fromEnv = typeof process !== "undefined"
+    ? process.env?.EXPO_PUBLIC_AI_API_BASE_URL?.trim()
+    : "";
+
+  if (fromEnv) {
+    return fromEnv.replace(/\/$/, "");
+  }
+
+  const constants = Constants;
+  const hostUri =
+    constants?.expoConfig?.hostUri ||
+    constants?.manifest2?.extra?.expoClient?.hostUri ||
+    constants?.manifest?.debuggerHost;
+
+  if (typeof hostUri === "string" && hostUri.length > 0) {
+    return `http://${hostUri.split(":")[0]}:8787`;
+  }
+
+  if (Platform.OS === "android") {
+    return "http://10.0.2.2:8787";
+  }
+
+  return "http://localhost:8787";
+}
 
 export const AI_CONFIG = {
-  geminiApiKey:
+  apiBaseUrl: inferAiApiBaseUrl(),
+  usdaApiKey:
     typeof process !== "undefined"
-      ? (process.env?.EXPO_PUBLIC_GEMINI_API_KEY ?? null)
+      ? (process.env?.EXPO_PUBLIC_USDA_API_KEY ?? null)
       : null,
-  model: "gemini-1.5-flash",
-  temperature: 0.2,
-  maxOutputTokens: 1024,
+  requestTimeoutMs: 30000,
 };
 
-/** Returns true when a real Gemini key has been configured. */
-export function hasGeminiKey() {
-  return Boolean(AI_CONFIG.geminiApiKey);
+export function hasAiBackendUrl() {
+  return Boolean(AI_CONFIG.apiBaseUrl);
 }

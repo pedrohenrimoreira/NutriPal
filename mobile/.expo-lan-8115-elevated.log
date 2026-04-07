@@ -1,0 +1,19 @@
+﻿**********************
+Início da transcrição do Windows PowerShell
+Hora de início: 20260406155734
+Nome de Usuário: PDRO\pedro
+Executar como Usuário: PDRO\pedro
+Nome da Configuração: 
+Computador: PDRO (Microsoft Windows NT 10.0.22631.0)
+Aplicativo Host: C:\WINDOWS\System32\WindowsPowerShell\v1.0\powershell.exe -NoExit -Command Set-Location 'D:\NutriPal\mobile'; Start-Transcript -Path 'D:\NutriPal\mobile\.expo-lan-8115-elevated.log' -Force; npx.cmd expo start --go --lan --port 8115 --clear; Stop-Transcript
+ID do Processo: 24084
+PSVersion: 5.1.22621.6133
+PSEdition: Desktop
+PSCompatibleVersions: 1.0, 2.0, 3.0, 4.0, 5.0, 5.1.22621.6133
+BuildVersion: 10.0.22621.6133
+CLRVersion: 4.0.30319.42000
+WSManStackVersion: 3.0
+PSRemotingProtocolVersion: 2.3
+SerializationVersion: 1.1.0.1
+**********************
+Transcrição iniciada, o arquivo de saída é D:\NutriPal\mobile\.expo-lan-8115-elevated.log

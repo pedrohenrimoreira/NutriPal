@@ -4,8 +4,8 @@
   "version": "1.0.0",
   "scripts": {
     "postinstall": "patch-package",
-    "start": "expo start --go --lan",
-    "start:go": "expo start --go --lan --clear"
+    "start": "node ./scripts/start-expo.cjs --go --lan",
+    "start:go": "node ./scripts/start-expo.cjs --go --lan --clear"
   },
   "dependencies": {
     "@anythingai/app": "0.1.96",

@@ -1,0 +1,5 @@
+env: load .env
+env: export EXPO_PUBLIC_APP_URL EXPO_PUBLIC_BASE_CREATE_USER_CONTENT_URL EXPO_PUBLIC_BASE_URL EXPO_PUBLIC_CREATE_ENV EXPO_PUBLIC_HOST EXPO_PUBLIC_PROJECT_GROUP_ID
+Starting project at D:\NutriPal\mobile
+› Port 8081 is being used by another process
+› Skipping dev server
