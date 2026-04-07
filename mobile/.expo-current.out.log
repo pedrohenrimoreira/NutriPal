@@ -227,3 +227,24 @@ iOS Bundled 1053ms index.tsx (1 module)
 
 Require cycles are allowed, but can result in uninitialized values. Consider refactoring to remove the need for a cycle.
  WARN  Linking requires a build-time setting `scheme` in the project's Expo config (app.config.js or app.json) for production apps, if it's left blank, your app may crash. The scheme does not apply to development in the Expo client but you should add it as soon as you start working with Linking to avoid creating a broken build. Learn more: https://docs.expo.dev/guides/linking/
+iOS .\index.tsx ░░░░░░░░░░░░░░░░  0.0% (0/1)
+iOS Bundled 7309ms index.tsx (1 module)
+iOS .\index.tsx ░░░░░░░░░░░░░░░░  0.0% (0/1)
+ LOG  Expo Go app detected. Using RevenueCat in Browser Mode.
+ WARN  Deep imports from the 'react-native' package are deprecated ('react-native/Libraries/Core/ExceptionsManager'). Source: D:\NutriPal\mobile\index.tsx 1:0
+ WARN  Deep imports from the 'react-native' package are deprecated ('react-native/Libraries/Components/TextInput/TextInput'). Source: D:\NutriPal\mobile\polyfills\native\textinput.native.jsx 2:0
+ WARN  SafeAreaView has been deprecated and will be removed in a future release. Please use 'react-native-safe-area-context' instead. See https://github.com/th3rdwave/react-native-safe-area-context
+ WARN  Require cycle: polyfills\shared\expo-image.tsx -> polyfills\shared\expo-image.tsx
+
+Require cycles are allowed, but can result in uninitialized values. Consider refactoring to remove the need for a cycle.
+ WARN  Linking requires a build-time setting `scheme` in the project's Expo config (app.config.js or app.json) for production apps, if it's left blank, your app may crash. The scheme does not apply to development in the Expo client but you should add it as soon as you start working with Linking to avoid creating a broken build. Learn more: https://docs.expo.dev/guides/linking/
+iOS .\index.tsx ░░░░░░░░░░░░░░░░  0.0% (0/1)
+iOS Bundled 177ms index.tsx (1 module)
+ LOG  Expo Go app detected. Using RevenueCat in Browser Mode.
+ WARN  Deep imports from the 'react-native' package are deprecated ('react-native/Libraries/Core/ExceptionsManager'). Source: D:\NutriPal\mobile\index.tsx 1:0
+ WARN  Deep imports from the 'react-native' package are deprecated ('react-native/Libraries/Components/TextInput/TextInput'). Source: D:\NutriPal\mobile\polyfills\native\textinput.native.jsx 2:0
+ WARN  SafeAreaView has been deprecated and will be removed in a future release. Please use 'react-native-safe-area-context' instead. See https://github.com/th3rdwave/react-native-safe-area-context
+ WARN  Require cycle: polyfills\shared\expo-image.tsx -> polyfills\shared\expo-image.tsx
+
+Require cycles are allowed, but can result in uninitialized values. Consider refactoring to remove the need for a cycle.
+ WARN  Linking requires a build-time setting `scheme` in the project's Expo config (app.config.js or app.json) for production apps, if it's left blank, your app may crash. The scheme does not apply to development in the Expo client but you should add it as soon as you start working with Linking to avoid creating a broken build. Learn more: https://docs.expo.dev/guides/linking/
