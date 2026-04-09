@@ -579,8 +579,14 @@ export default function Index({ forceOpenKeyboardOnMount }) {
   }, []);
 
   useEffect(() => {
-    if (params.openKeyboard || forceOpenKeyboardOnMount) {
-       handleStartEditing();
+    if (params.openKeyboard) {
+      handleStartEditing();
+      router.setParams({ openKeyboard: undefined });
+      return;
+    }
+
+    if (forceOpenKeyboardOnMount) {
+      handleStartEditing();
     }
   }, [params.openKeyboard, forceOpenKeyboardOnMount, handleStartEditing, router]);
 
@@ -883,12 +889,14 @@ export default function Index({ forceOpenKeyboardOnMount }) {
 
       {/* ── Content ─────────────────────────────────────────────────────── */}
       <KeyboardAvoidingView
+        collapsable={false}
         style={styles.flex}
         behavior={Platform.OS === "ios" ? "padding" : "height"}
         keyboardVerticalOffset={0}
       >
         {/* ── 3-page horizontal day swiper ────────────────────────────── */}
         <FlatList
+          collapsable={false}
           ref={swipeRef}
           horizontal
           pagingEnabled
@@ -913,8 +921,10 @@ export default function Index({ forceOpenKeyboardOnMount }) {
                 const hasJournalContent = Boolean(dayText.trim());
                 return (
               <ScrollView
+                collapsable={false}
                 ref={isActive ? scrollRef : null}
-                 onScroll={isActive ? handleJournalScroll : undefined}
+                contentInsetAdjustmentBehavior="automatic"
+                onScroll={isActive ? handleJournalScroll : undefined}
                 scrollEventThrottle={isActive ? tabBarScrollEventThrottle : undefined}
                 scrollIndicatorInsets={{
                   bottom: scrollIndicatorBottomInset,

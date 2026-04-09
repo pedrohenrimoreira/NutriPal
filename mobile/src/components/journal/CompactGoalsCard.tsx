@@ -29,9 +29,11 @@ type NutritionGoals = {
 };
 
 interface CompactGoalsCardProps {
+  embedded?: boolean;
   nutritionGoals: NutritionGoals;
   onClose: () => void;
   onManageGoals: () => void;
+  scrollable?: boolean;
   totals: Totals;
 }
 
@@ -141,15 +143,16 @@ function CardSurface({ children }: { children: React.ReactNode }) {
 }
 
 export function CompactGoalsCard({
+  embedded = false,
   nutritionGoals,
   onClose,
   onManageGoals,
+  scrollable = true,
   totals,
 }: CompactGoalsCardProps) {
   const C = useThemeStore((store) => store.colors);
-
-  return (
-    <CardSurface>
+  const body = (
+    <>
       <View style={styles.header}>
         <Text style={[styles.headerTitle, { color: C.textPrimary }]}>Goals</Text>
         <Pressable
@@ -163,12 +166,7 @@ export function CompactGoalsCard({
         </Pressable>
       </View>
 
-      <ScrollView
-        bounces={false}
-        contentContainerStyle={styles.scrollContent}
-        indicatorStyle="white"
-        showsVerticalScrollIndicator={false}
-      >
+      <View style={styles.scrollContent}>
         <View style={styles.section}>
           <ProgressRow
             accentColor={C.accentOrange}
@@ -215,7 +213,26 @@ export function CompactGoalsCard({
           </View>
           <AppSymbol color={C.textTertiary} name="chevron.right" size={14} weight="medium" />
         </TouchableOpacity>
-      </ScrollView>
+      </View>
+    </>
+  );
+
+  if (embedded) {
+    return body;
+  }
+
+  return (
+    <CardSurface>
+      {scrollable ? (
+        <ScrollView
+          bounces={false}
+          contentContainerStyle={styles.surfaceScrollContent}
+          indicatorStyle="white"
+          showsVerticalScrollIndicator={false}
+        >
+          {body}
+        </ScrollView>
+      ) : body}
     </CardSurface>
   );
 }
@@ -247,6 +264,9 @@ const styles = StyleSheet.create({
     minWidth: 28,
   },
   scrollContent: {
+    gap: spacing.md,
+  },
+  surfaceScrollContent: {
     gap: spacing.md,
     paddingBottom: spacing.xs,
   },

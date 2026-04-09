@@ -1,6 +1,9 @@
 import React from "react";
-import JournalScreen from "../../screens/JournalScreen";
+import { View } from "react-native";
+import { useThemeStore } from "../../store/themeStore";
 
 export default function NotesScreen() {
-  return <JournalScreen forceOpenKeyboardOnMount={true} />;
+  const backgroundColor = useThemeStore((store) => store.colors.bgPrimary);
+
+  return <View style={{ flex: 1, backgroundColor }} />;
 }

@@ -82,62 +82,64 @@ export function JournalTabAccessory({
         styles.surface,
         isInline ? styles.surfaceInline : styles.surfaceRegular,
         {
-          backgroundColor: C.bgSecondary,
-          borderTopColor: isInline ? "transparent" : C.separator,
+          backgroundColor: "transparent",
+          borderTopColor: "transparent",
           opacity: pressed ? 0.86 : 1,
         },
       ]}
     >
       <View style={styles.row}>
-        <View style={styles.summaryGroup}>
+        <View style={styles.contentGroup}>
+          <View style={styles.summaryGroup}>
+            <AppSymbol
+              color={C.accentOrange}
+              name="flame.fill"
+              size={isInline ? 12 : 13}
+              weight="medium"
+            />
+            <Text
+              numberOfLines={1}
+              style={[
+                styles.caloriesLabel,
+                isInline && styles.caloriesLabelInline,
+                { color: C.textPrimary },
+              ]}
+            >
+              {calories.toLocaleString("en-US")} cal
+            </Text>
+          </View>
+
+          <View style={styles.macrosRow}>
+            <MacroStat
+              color={C.carbs}
+              isInline={isInline}
+              label="C"
+              value={carbs}
+              valueColor={C.textPrimary}
+            />
+            <MacroStat
+              color={C.protein}
+              isInline={isInline}
+              label="P"
+              value={protein}
+              valueColor={C.textPrimary}
+            />
+            <MacroStat
+              color={C.fat}
+              isInline={isInline}
+              label="F"
+              value={fat}
+              valueColor={C.textPrimary}
+            />
+          </View>
+
           <AppSymbol
-            color={C.accentOrange}
-            name="flame.fill"
-            size={isInline ? 12 : 13}
-            weight="medium"
-          />
-          <Text
-            numberOfLines={1}
-            style={[
-              styles.caloriesLabel,
-              isInline && styles.caloriesLabelInline,
-              { color: C.textPrimary },
-            ]}
-          >
-            {calories.toLocaleString("en-US")} cal
-          </Text>
-        </View>
-
-        <View style={styles.macrosRow}>
-          <MacroStat
-            color={C.carbs}
-            isInline={isInline}
-            label="C"
-            value={carbs}
-            valueColor={C.textPrimary}
-          />
-          <MacroStat
-            color={C.protein}
-            isInline={isInline}
-            label="P"
-            value={protein}
-            valueColor={C.textPrimary}
-          />
-          <MacroStat
-            color={C.fat}
-            isInline={isInline}
-            label="F"
-            value={fat}
-            valueColor={C.textPrimary}
+            color={C.textTertiary}
+            name="chevron.up"
+            size={isInline ? 11 : 12}
+            weight="semibold"
           />
         </View>
-
-        <AppSymbol
-          color={C.textTertiary}
-          name="chevron.up"
-          size={isInline ? 11 : 12}
-          weight="semibold"
-        />
       </View>
     </Pressable>
   );
@@ -145,7 +147,6 @@ export function JournalTabAccessory({
 
 const styles = StyleSheet.create({
   surface: {
-    borderTopWidth: StyleSheet.hairlineWidth,
     justifyContent: "center",
     width: "100%",
   },
@@ -162,14 +163,20 @@ const styles = StyleSheet.create({
   row: {
     alignItems: "center",
     flexDirection: "row",
-    gap: spacing.md,
+    justifyContent: "center",
+    width: "100%",
+  },
+  contentGroup: {
+    alignItems: "center",
+    flexDirection: "row",
+    gap: spacing.lg,
+    justifyContent: "center",
   },
   summaryGroup: {
     alignItems: "center",
     flexDirection: "row",
-    flex: 1,
     gap: spacing.xs + 1,
-    minWidth: 0,
+    justifyContent: "center",
   },
   caloriesLabel: {
     ...typography.subhead,
@@ -186,6 +193,7 @@ const styles = StyleSheet.create({
     alignItems: "center",
     flexDirection: "row",
     gap: spacing.sm + 2,
+    justifyContent: "center",
   },
   macroGroup: {
     alignItems: "baseline",

@@ -1,5 +1,5 @@
 import { Tabs, useRouter, useSegments } from "expo-router";
-import { NativeTabs, icons, labels } from "expo-router/unstable-native-tabs";
+import { NativeTabs } from "expo-router/unstable-native-tabs";
 import React, { useCallback, useMemo } from "react";
 import { DynamicColorIOS, Platform } from "react-native";
 import { JournalTabAccessory } from "../../components/journal/JournalTabAccessory";
@@ -21,7 +21,7 @@ export default function PrimaryTabsLayout() {
   const C = useThemeStore((store) => store.colors);
   const { entries, journal } = useJournalStore();
   const totals = useDailyTotals(journal, entries);
-  const isJournalRootScreen = segments[1] === "(journal)" && segments[2] == null;
+  const isJournalTabFocused = segments[1] === "(journal)";
   const nativeTabsTintColor = useMemo(() => (
     Platform.OS === "ios"
       ? DynamicColorIOS({
@@ -42,7 +42,16 @@ export default function PrimaryTabsLayout() {
 
   const openGoals = useCallback(() => {
     journalHaptics.light();
-    router.push("/(tabs)/(journal)/goals");
+    router.navigate("/(tabs)/(journal)/goals");
+  }, [router]);
+
+  const openJournalComposer = useCallback(() => {
+    router.navigate({
+      pathname: "/(tabs)/(journal)",
+      params: {
+        openKeyboard: Date.now().toString(),
+      },
+    });
   }, [router]);
 
   const sharedTabsScreenOptions = useCallback(({
@@ -83,7 +92,7 @@ export default function PrimaryTabsLayout() {
         minimizeBehavior={supportsNativeBottomAccessory ? "onScrollDown" : undefined}
         tintColor={nativeTabsTintColor}
       >
-        {isJournalRootScreen && supportsNativeBottomAccessory ? (
+        {isJournalTabFocused && supportsNativeBottomAccessory ? (
           <NativeTabs.BottomAccessory>
             <JournalTabAccessory
               onPress={openGoals}
@@ -95,7 +104,6 @@ export default function PrimaryTabsLayout() {
           name="(journal)"
           role="bookmarks"
           contentStyle={{ backgroundColor: C.bgPrimary }}
-          disableAutomaticContentInsets
         >
           <NativeTabs.Trigger.Icon sf={{ default: "text.book.closed", selected: "text.book.closed.fill" }} />
           <NativeTabs.Trigger.Label>Journal</NativeTabs.Trigger.Label>
@@ -113,6 +121,13 @@ export default function PrimaryTabsLayout() {
           role="search"
           contentStyle={{ backgroundColor: C.bgPrimary }}
           disableAutomaticContentInsets
+          listeners={{
+            tabPress: () => {
+              requestAnimationFrame(() => {
+                openJournalComposer();
+              });
+            },
+          }}
         >
           <NativeTabs.Trigger.Icon sf={{ default: "square.and.pencil", selected: "square.and.pencil" }} />
           <NativeTabs.Trigger.Label>Notes</NativeTabs.Trigger.Label>
@@ -142,6 +157,13 @@ export default function PrimaryTabsLayout() {
           key={tab.name}
           name={tab.name}
           options={({ route }) => sharedTabsScreenOptions({ route: { name: route.name } })}
+          listeners={tab.name === "notes" ? {
+            tabPress: () => {
+              requestAnimationFrame(() => {
+                openJournalComposer();
+              });
+            },
+          } : undefined}
         />
       ))}
     </Tabs>

@@ -82,8 +82,10 @@ export default function JournalTabStackLayout() {
         options={{
           headerShown: false,
           presentation: IOS_SHEET ? "formSheet" : "modal",
-          sheetAllowedDetents: IOS_SHEET ? [0.62, 0.82] : undefined,
+          sheetAllowedDetents: IOS_SHEET ? "fitToContents" : undefined,
+          sheetExpandsWhenScrolledToEdge: IOS_SHEET,
           sheetGrabberVisible: IOS_SHEET,
+          sheetLargestUndimmedDetentIndex: IOS_SHEET ? "last" : undefined,
         }}
       />
       <Stack.Screen

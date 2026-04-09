@@ -1,6 +1,6 @@
 import { useRouter } from "expo-router";
 import React, { useCallback } from "react";
-import { StyleSheet, View } from "react-native";
+import { ScrollView, StyleSheet } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { CompactGoalsCard } from "../../components/journal/CompactGoalsCard";
 import { useDailyTotals, useJournalStore } from "../../store/journalStore";
@@ -28,20 +28,28 @@ export default function GoalsScreen() {
 
   return (
     <SafeAreaView
-      edges={["bottom"]}
+      edges={["bottom", "left", "right"]}
       style={[
         styles.safeArea,
         { backgroundColor: C.bgPrimary },
       ]}
     >
-      <View style={styles.content}>
+      <ScrollView
+        bounces={false}
+        contentInsetAdjustmentBehavior="automatic"
+        contentContainerStyle={styles.content}
+        indicatorStyle="white"
+        showsVerticalScrollIndicator={false}
+      >
         <CompactGoalsCard
+          embedded
           nutritionGoals={nutritionGoals}
           onClose={handleClose}
           onManageGoals={handleManageGoals}
+          scrollable={false}
           totals={totals}
         />
-      </View>
+      </ScrollView>
     </SafeAreaView>
   );
 }
@@ -51,9 +59,8 @@ const styles = StyleSheet.create({
     flex: 1,
   },
   content: {
-    flex: 1,
-    justifyContent: "center",
     paddingHorizontal: spacing.lg,
     paddingVertical: spacing.lg,
+    gap: spacing.md,
   },
 });
