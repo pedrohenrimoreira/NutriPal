@@ -44,6 +44,12 @@ const FOOD_LIBRARY = [
     per100g: { calories: 300, protein_g: 8.5, carbs_g: 58.6, fat_g: 3.1 },
   },
   {
+    name: "Pao de queijo",
+    aliases: ["pao de queijo", "pao queijo", "paozinho de queijo"],
+    grams: 50,
+    per100g: { calories: 363, protein_g: 5.1, carbs_g: 34.7, fat_g: 23.8 },
+  },
+  {
     name: "Queijo",
     aliases: ["queijo", "mussarela", "muçarela", "queijo minas"],
     grams: 30,
@@ -121,11 +127,32 @@ function totalsFromItems(items) {
   );
 }
 
-function extractQuantity(text) {
+function extractQuantityInfo(text) {
+  const explicitWeightMatch = text.match(/(\d+(?:[.,]\d+)?)\s*(kg|quilo|quilos|g|grama|gramas|ml)\b/i);
+  if (explicitWeightMatch) {
+    const numeric = Number(explicitWeightMatch[1].replace(",", "."));
+    const unit = String(explicitWeightMatch[2] ?? "").toLowerCase();
+
+    if (Number.isFinite(numeric) && numeric > 0) {
+      return {
+        multiplier: 1,
+        explicitGrams: unit.startsWith("kg") || unit.startsWith("quilo")
+          ? numeric * 1000
+          : numeric,
+      };
+    }
+  }
+
   const quantityMatch = text.match(/(\d+(?:[.,]\d+)?)/);
-  if (!quantityMatch) return 1;
+  if (!quantityMatch) {
+    return { multiplier: 1, explicitGrams: null };
+  }
+
   const numeric = Number(quantityMatch[1].replace(",", "."));
-  return Number.isFinite(numeric) && numeric > 0 ? numeric : 1;
+  return {
+    multiplier: Number.isFinite(numeric) && numeric > 0 ? numeric : 1,
+    explicitGrams: null,
+  };
 }
 
 function splitMealText(rawText) {
@@ -137,7 +164,7 @@ function splitMealText(rawText) {
 
 function matchFood(part) {
   const normalizedPart = normalizeMealKey(part);
-  const quantity = extractQuantity(part);
+  const quantity = extractQuantityInfo(part);
 
   let bestMatch = null;
   let bestAliasLength = 0;
@@ -159,7 +186,7 @@ function matchFood(part) {
 
   return createItem(
     bestMatch.name,
-    bestMatch.grams * quantity,
+    quantity.explicitGrams ?? (bestMatch.grams * quantity.multiplier),
     bestMatch.per100g,
     0.86,
   );

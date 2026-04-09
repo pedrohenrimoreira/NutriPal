@@ -32,12 +32,21 @@ function inferHostFromExpo() {
 }
 
 export function getAiApiBaseUrl() {
-  const fromEnv = process.env.EXPO_PUBLIC_AI_API_BASE_URL?.trim() || process.env.EXPO_PUBLIC_BASE_URL?.trim() || process.env.EXPO_PUBLIC_APP_URL?.trim();
+  const fromEnv = process.env.EXPO_PUBLIC_AI_API_BASE_URL?.trim();
   if (fromEnv) {
     return fromEnv.replace(/\/$/, "");
   }
 
-  return "https://34c911ea-d743-4ecc-8132-76ae59dd1227.created.app";
+  const expoHost = inferHostFromExpo();
+  if (expoHost) {
+    return `http://${expoHost}:8787`;
+  }
+
+  if (Platform.OS === "android") {
+    return "http://10.0.2.2:8787";
+  }
+
+  return "http://localhost:8787";
 }
 
 export class AiApiError extends Error {
@@ -97,9 +106,10 @@ async function requestJson<T>(
 ): Promise<T> {
   const controller = new AbortController();
   const timeoutId = setTimeout(() => controller.abort(), timeoutMs);
+  const url = `${getAiApiBaseUrl()}${path}`;
 
   try {
-    const response = await fetch(`${getAiApiBaseUrl()}${path}`, {
+    const response = await fetch(url, {
       ...init,
       signal: controller.signal,
       headers: {
@@ -113,10 +123,13 @@ async function requestJson<T>(
 
     if (!response.ok || !payload?.ok) {
       const error = payload?.error;
+      const fallbackMessage = response.status === 404
+        ? `Endpoint de IA nao encontrado em ${url}.`
+        : `Request failed with status ${response.status}.`;
       throw new AiApiError(
         response.status,
         error?.code ?? "REQUEST_FAILED",
-        error?.message ?? `Request failed with status ${response.status}.`,
+        error?.message ?? fallbackMessage,
         error?.details,
         error?.requestId ?? requestId,
         error?.upstreamRequestId,
@@ -126,10 +139,24 @@ async function requestJson<T>(
     return payload.data;
   } catch (error) {
     if ((error as Error)?.name === "AbortError") {
-      throw new AiApiError(408, "REQUEST_TIMEOUT", "The request timed out.");
+      throw new AiApiError(
+        408,
+        "REQUEST_TIMEOUT",
+        `A requisicao para o backend de IA expirou em ${url}.`,
+      );
     }
 
-    throw error;
+    if (error instanceof AiApiError) {
+      throw error;
+    }
+
+    const message = error instanceof Error ? error.message : String(error);
+    throw new AiApiError(
+      503,
+      "BACKEND_UNREACHABLE",
+      `Nao foi possivel conectar ao backend de IA em ${url}. Verifique se o ai-backend esta rodando.`,
+      { cause: message },
+    );
   } finally {
     clearTimeout(timeoutId);
   }

@@ -4,7 +4,7 @@ import { randomUUID } from "node:crypto";
 import { toFile } from "openai/uploads";
 import { env } from "../../config/env.js";
 import { AppError } from "../../lib/errors.js";
-import { openai } from "../../lib/openai.js";
+import { getOpenAI } from "../../lib/openai.js";
 
 const SUPPORTED_MIME_TYPES = new Set([
   "application/pdf",
@@ -41,6 +41,7 @@ export async function persistAndUploadFile(
 
   await writeFile(storedPath, file.buffer);
 
+  const openai = getOpenAI();
   const uploadable = await toFile(file.buffer, file.originalname, { type: file.mimetype });
   const uploaded = await openai.files.create({
     file: uploadable,

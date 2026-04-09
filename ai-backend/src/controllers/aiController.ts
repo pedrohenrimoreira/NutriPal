@@ -1,5 +1,6 @@
 import type { Request, Response } from "express";
 import { ZodError, z } from "zod";
+import { env } from "../config/env.js";
 import { AppError } from "../lib/errors.js";
 import { logger } from "../lib/logger.js";
 import {
@@ -103,6 +104,7 @@ export function getHealth(_req: Request, res: Response) {
     data: {
       status: "ok",
       service: "nutripal-ai-backend",
+      openaiConfigured: env.hasOpenAiKey,
       timestamp: new Date().toISOString(),
     },
   });

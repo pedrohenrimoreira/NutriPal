@@ -5,6 +5,7 @@
   "scripts": {
     "postinstall": "patch-package",
     "start": "node ./scripts/start-expo.cjs --go --lan",
+    "start:dev-client": "node ./scripts/start-expo.cjs --lan",
     "start:go": "node ./scripts/start-expo.cjs --go --lan --clear"
   },
   "dependencies": {

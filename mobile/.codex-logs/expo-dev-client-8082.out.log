@@ -1,0 +1,12 @@
+
+> mobile@1.0.0 start:dev-client
+> node ./scripts/start-expo.cjs --lan --port 8082
+
+[start-expo] using port 8082
+env: load .env
+env: export EXPO_PUBLIC_APP_URL EXPO_PUBLIC_BASE_CREATE_USER_CONTENT_URL EXPO_PUBLIC_BASE_URL EXPO_PUBLIC_CREATE_ENV EXPO_PUBLIC_HOST EXPO_PUBLIC_PROJECT_GROUP_ID
+Starting project at D:\NutriPal\mobile
+Using src/app as the root directory for Expo Router.
+Starting Metro Bundler
+Waiting on http://localhost:8082
+Logs for your project will appear below.

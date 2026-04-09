@@ -9,43 +9,17 @@
 import React, {
   useState, useRef, useCallback, useMemo, useEffect,
 } from "react";
+import { useRouter } from "expo-router";
 import {
   View, Text, TextInput, TouchableOpacity, ScrollView, FlatList, Image, Pressable,
   KeyboardAvoidingView, Platform, StyleSheet, Keyboard, LayoutAnimation,
-  useWindowDimensions, Modal, Alert, Switch, Linking,
+  useWindowDimensions, Modal, Alert,
 } from "react-native";
 
 import * as ImagePicker from "expo-image-picker";
-import { useRouter } from "expo-router";
-import { SymbolView } from "expo-symbols";
 import { GlassView, isLiquidGlassAvailable } from "expo-glass-effect";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { StatusBar } from "expo-status-bar";
-import BottomSheet, { BottomSheetView, BottomSheetScrollView } from "@gorhom/bottom-sheet";
-import { Calendar } from "react-native-calendars";
-import {
-  Bell,
-  ChartBarBig,
-  Clock3,
-  Crown,
-  FileText,
-  Heart,
-  Info,
-  LogOut,
-  MessageCircle,
-  Mic,
-  Moon,
-  Scale,
-  Share,
-  Star,
-  SunMedium,
-  Target,
-  Trash2,
-  TrendingDown,
-  TriangleAlert,
-  UtensilsCrossed,
-} from "lucide-react-native";
-import { AnimatePresence, MotiView } from "moti";
 
 import {
   useJournalStore,
@@ -61,11 +35,17 @@ import { analyzeJournalText } from "../services/journalAnalysis";
 import { MealEntryCard } from "../components/journal/MealEntryCard";
 import { ActionBar } from "../components/journal/ActionBar";
 import { GoalsPanel } from "../components/journal/GoalsPanel";
-import { JournalSummaryBar } from "../components/journal/JournalSummaryBar";
+import { LegacyJournalSummaryBar } from "../components/journal/LegacyJournalSummaryBar";
 import { ThinkingShimmer } from "../components/journal/ThinkingShimmer";
-import { GlassIconButton } from "../components/GlassIconButton";
+import { AppSymbol } from "../components/icons/AppSymbol";
+import {
+  useFloatingTabBarInsets,
+  useFloatingTabBarScroll,
+} from "../hooks/useFloatingTabBar";
+import { useJournalUiStore } from "../store/journalUiStore";
 import journalHaptics from "../utils/journalHaptics";
 import { colors, spacing, radius, typography } from "../theme";
+import { AnimatePresence, MotiView } from "moti";
 
 const WEB_TOP_INSET = Platform.OS === "web" ? 16 : 0;
 const WEB_BOTTOM_INSET = Platform.OS === "web" ? 34 : 0;
@@ -104,28 +84,36 @@ function formatMonthYear(dateStr) {
 const glass = (fallback) =>
   isLiquidGlassAvailable() ? {} : { backgroundColor: fallback };
 
-const ICON_BY_SYMBOL = {
-  "scalemass.fill": Scale,
-  "chart.bar.fill": ChartBarBig,
-  "heart.fill": Heart,
-  "doc.text.fill": FileText,
-  "chart.line.downtrend.xyaxis": TrendingDown,
-  "fork.knife": UtensilsCrossed,
-  target: Target,
-  "bell.fill": Bell,
-  "moon.fill": Moon,
-  "sun.max.fill": SunMedium,
-  "clock.fill": Clock3,
-  "mic.fill": Mic,
-  "crown.fill": Crown,
-  "star.fill": Star,
-  "info.circle.fill": Info,
-  "bubble.left.fill": MessageCircle,
-  "trash.fill": Trash2,
-  "square.and.arrow.up.fill": Share,
-  "exclamationmark.triangle.fill": TriangleAlert,
-  "rectangle.portrait.and.arrow.right.fill": LogOut,
-};
+function HeaderCapsule({
+  children,
+  fallback,
+  style,
+}) {
+  const C = useThemeStore((state) => state.colors);
+
+  if (Platform.OS === "ios") {
+    return (
+      <View
+        style={[
+          style,
+          styles.headerCapsuleNative,
+          {
+            backgroundColor: C.bgSecondary,
+            borderColor: C.separator,
+          },
+        ]}
+      >
+        {children}
+      </View>
+    );
+  }
+
+  return (
+    <GlassView isInteractive style={[style, glass(fallback)]}>
+      {children}
+    </GlassView>
+  );
+}
 
 function splitJournalLines(rawText) {
   const normalized = String(rawText ?? "");
@@ -162,6 +150,15 @@ function buildAllLineInsights(rawText, journal) {
       const existing = annotations.get(line.lineIndex);
 
       if (existing?.sourceText === line.sourceText) {
+        if (existing.error) {
+          return {
+            type: "error",
+            ...existing,
+            lineIndex: line.lineIndex,
+            isLoading: false,
+          };
+        }
+
         return {
           type: "ready",
           ...existing,
@@ -211,7 +208,7 @@ function AnnotationBadge({ insight, onPressSources }) {
   if (insight.type === "error") {
     return (
       <View style={pS.badge}>
-        <Text style={[pS.errorText, { color: C.accentRed }]}>No match</Text>
+        <Text style={[pS.errorText, { color: C.accentRed }]}>Erro IA</Text>
       </View>
     );
   }
@@ -246,29 +243,25 @@ function AnnotationBadge({ insight, onPressSources }) {
 
 /* ── settings sub-components ─────────────────────────────────────────────── */
 
-// Settings icon slot with SF Symbols on iOS and Lucide fallback elsewhere
-function IconBadge({ color, icon, sfName }) {
-  const LucideIcon = sfName ? ICON_BY_SYMBOL[sfName] : null;
+// Settings icon slot using SF Symbols throughout the app
+function IconBadge({ color, sfName }) {
 
   return (
     <View style={sS.iconBadge}>
-      {Platform.OS === "ios" && sfName ? (
-        <SymbolView
+      {sfName ? (
+        <AppSymbol
+          color={color}
           name={sfName}
+          size={18}
           style={sS.symbol}
-          type="monochrome"
-          tintColor={color}
+          weight="medium"
         />
-      ) : LucideIcon ? (
-        <LucideIcon color={color} size={18} strokeWidth={2.15} />
-      ) : (
-        <Text style={[sS.badgeIcon, { color }]}>{icon}</Text>
-      )}
+      ) : null}
     </View>
   );
 }
 
-function NavRow({ badge, badgeColor, sfName, label, sublabel, value, onPress, isLast }) {
+function NavRow({ badgeColor, sfName, label, sublabel, value, onPress, isLast }) {
   const C = useThemeStore((s) => s.colors);
   const handlePress = useCallback(() => {
     if (!onPress) return;
@@ -277,13 +270,21 @@ function NavRow({ badge, badgeColor, sfName, label, sublabel, value, onPress, is
   }, [onPress]);
   const content = (
     <View style={[sS.row, isLast && sS.rowLast]}>
-      {badge ? <IconBadge color={badgeColor} icon={badge} sfName={sfName} /> : null}
+      {sfName ? <IconBadge color={badgeColor} sfName={sfName} /> : null}
       <View style={sS.rowBody}>
         <Text style={[sS.rowLabel, { color: C.textPrimary }]}>{label}</Text>
         {sublabel ? <Text style={[sS.rowSub, { color: C.textSecondary }]}>{sublabel}</Text> : null}
       </View>
       {value ? <Text style={[sS.rowVal, { color: C.textSecondary }]}>{value}</Text> : null}
-      {onPress ? <Text style={[sS.chevron, { color: C.textTertiary }]}>›</Text> : null}
+      {onPress ? (
+        <AppSymbol
+          color={C.textTertiary}
+          name="chevron.right"
+          size={14}
+          style={sS.chevron}
+          weight="medium"
+        />
+      ) : null}
     </View>
   );
   return onPress ? (
@@ -291,7 +292,7 @@ function NavRow({ badge, badgeColor, sfName, label, sublabel, value, onPress, is
   ) : content;
 }
 
-function ToggleRow({ badge, badgeColor, sfName, label, sublabel, value, onToggle, isLast }) {
+function ToggleRow({ badgeColor, sfName, label, sublabel, value, onToggle, isLast }) {
   const C = useThemeStore((s) => s.colors);
   const handleToggle = useCallback((nextValue) => {
     journalHaptics.selection();
@@ -299,7 +300,7 @@ function ToggleRow({ badge, badgeColor, sfName, label, sublabel, value, onToggle
   }, [onToggle]);
   return (
     <View style={[sS.row, isLast && sS.rowLast]}>
-      {badge ? <IconBadge color={badgeColor} icon={badge} sfName={sfName} /> : null}
+      {sfName ? <IconBadge color={badgeColor} sfName={sfName} /> : null}
       <View style={sS.rowBody}>
         <Text style={[sS.rowLabel, { color: C.textPrimary }]}>{label}</Text>
         {sublabel ? <Text style={[sS.rowSub, { color: C.textSecondary }]}>{sublabel}</Text> : null}
@@ -332,7 +333,6 @@ function AppearanceRow({ colorMode, onToggle }) {
     <View style={sS.row}>
       <IconBadge
         color={isDark ? "#5e5ce6" : "#f59e0b"}
-        icon={isDark ? "🌙" : "☀️"}
         sfName={isDark ? "moon.fill" : "sun.max.fill"}
       />
       <View style={sS.rowBody}>
@@ -394,8 +394,8 @@ export default function Index() {
   } = useJournalStore();
   const totals = useDailyTotals(journal, entries);
   const savedMeals = useSettingsStore((state) => state.savedMeals);
-  const addSavedMeal = useSettingsStore((state) => state.addSavedMeal);
-  const removeSavedMeal = useSettingsStore((state) => state.removeSavedMeal);
+  const setNutritionDetail = useJournalUiStore((state) => state.setNutritionDetail);
+  const setSavedMealDraft = useJournalUiStore((state) => state.setSavedMealDraft);
   const insets = useSafeAreaInsets();
   const {
     isListening,
@@ -409,8 +409,6 @@ export default function Index() {
   /* theme — reactive via Zustand (safe on web, no hook-context issues) ------ */
   const C = useThemeStore((s) => s.colors);
   const colorMode = useThemeStore((s) => s.colorMode);
-  const setColorMode = useThemeStore((s) => s.setColorMode);
-  const handleToggleAppearance = useCallback((mode) => setColorMode(mode), [setColorMode]);
 
   const [isEditing, setIsEditing] = useState(false);
   const [text, setText] = useState(journal.rawText ?? "");
@@ -418,23 +416,13 @@ export default function Index() {
   const analysisTimerRef = useRef(null);
   const [keyboardVisible, setKeyboardVisible] = useState(false);
   const [keyboardHeight, setKeyboardHeight] = useState(0);
-  const [goalsExpanded, setGoalsExpanded] = useState(false);
-  const [autoTimeZone, setAutoTimeZone] = useState(true);
-  const [reminders, setReminders] = useState(false);
-  const [settingsView, setSettingsView] = useState("main");
-  const [saveMealModalVisible, setSaveMealModalVisible] = useState(false);
-  const [savedMealName, setSavedMealName] = useState("");
-  const [pendingSavedMeal, setPendingSavedMeal] = useState(null);
   const [cameraMenuVisible, setCameraMenuVisible] = useState(false);
-  const [selectedNutritionDetail, setSelectedNutritionDetail] = useState(null);
+  const [goalsExpanded, setGoalsExpanded] = useState(false);
 
-  const { width } = useWindowDimensions();
+  const { width: windowWidth } = useWindowDimensions();
   const inputRef = useRef(null);
   const scrollRef = useRef(null);
   const swipeRef = useRef(null);
-  const calSheetRef = useRef(null);
-  const settingsSheetRef = useRef(null);
-  const nutritionSheetRef = useRef(null);
   const dictationBaseTextRef = useRef("");
   const isListeningRef = useRef(isListening);
 
@@ -448,11 +436,19 @@ export default function Index() {
 
   const todayStr = useMemo(() => toDateStr(new Date()), []);
   const dateLabel = useMemo(() => formatDateLabel(selectedDate), [selectedDate]);
-  const monthYearLabel = useMemo(() => formatMonthYear(selectedDate), [selectedDate]);
-  const savedMealsLabel = useMemo(
-    () => `${savedMeals.length} saved meal${savedMeals.length !== 1 ? "s" : ""}`,
-    [savedMeals.length],
-  );
+  const {
+    contentBottomInset,
+    overlayBottomOffset,
+    scrollIndicatorBottomInset,
+  } = useFloatingTabBarInsets(64);
+  const {
+    onScroll: handleTabBarScroll,
+    scrollEventThrottle: tabBarScrollEventThrottle,
+  } = useFloatingTabBarScroll();
+
+  const handleJournalScroll = useCallback((event) => {
+    handleTabBarScroll?.(event);
+  }, [handleTabBarScroll]);
 
   /* keyboard visibility --------------------------------------------------- */
   useEffect(() => {
@@ -464,7 +460,7 @@ export default function Index() {
     const willHide = Platform.OS === "ios" ? "keyboardWillHide" : "keyboardDidHide";
     const didHide  = "keyboardDidHide";
 
-    // Show: mark visible + collapse goals + capture keyboard height
+    // Show: mark visible + capture keyboard height
     const sL = Keyboard.addListener(willShow, (e) => {
       LayoutAnimation.configureNext(LayoutAnimation.Presets.easeInEaseOut);
       setKeyboardVisible(true);
@@ -472,7 +468,6 @@ export default function Index() {
       setGoalsExpanded(false);
     });
 
-    // willHide: hide GoalsPanel early (smooth, before keyboard finishes moving)
     const wL = Platform.OS === "ios"
       ? Keyboard.addListener(willHide, () => {
           LayoutAnimation.configureNext(LayoutAnimation.Presets.easeInEaseOut);
@@ -502,16 +497,12 @@ export default function Index() {
   /* re-center swiper whenever selectedDate changes (swipe or calendar pick) */
   useEffect(() => {
     swipeRef.current?.scrollToIndex({ index: 1, animated: false });
+    setGoalsExpanded(false);
   }, [selectedDate]);
 
   useEffect(() => {
     cancelDebounce();
   }, [cancelDebounce, selectedDate]);
-
-  useEffect(() => {
-    nutritionSheetRef.current?.close();
-    setSelectedNutritionDetail(null);
-  }, [selectedDate]);
 
   useEffect(() => {
     const nextText = journal.rawText ?? "";
@@ -557,7 +548,7 @@ export default function Index() {
 
   const handleDaySwipe = useCallback((e) => {
     const x = e.nativeEvent.contentOffset.x;
-    if (x < width * 0.5) {
+    if (x < windowWidth * 0.5) {
       cancelDebounce();
       if (isListening) {
         stopListening();
@@ -567,7 +558,7 @@ export default function Index() {
       clearTranscript();
       dictationBaseTextRef.current = "";
       setDate(offsetDay(selectedDate, -1));
-    } else if (x > width * 1.5) {
+    } else if (x > windowWidth * 1.5) {
       cancelDebounce();
       if (isListening) {
         stopListening();
@@ -579,7 +570,7 @@ export default function Index() {
       setDate(offsetDay(selectedDate, +1));
     }
     // If user bounced back to center, no state change needed
-  }, [cancelDebounce, clearTranscript, isListening, selectedDate, setDate, stopListening, width]);
+  }, [cancelDebounce, clearTranscript, isListening, selectedDate, setDate, stopListening, windowWidth]);
 
   const handleStartEditing = useCallback(() => {
     LayoutAnimation.configureNext(LayoutAnimation.Presets.easeInEaseOut);
@@ -625,7 +616,7 @@ export default function Index() {
       } catch (analysisError) {
         failJournalAnalysis(snapshotDate, version, analysisError?.message);
       }
-    }, 1200);
+    }, 700);
   }, [
     beginJournalAnalysis,
     cancelDebounce,
@@ -793,90 +784,31 @@ export default function Index() {
       sourceText.length > 40 ? `${sourceText.slice(0, 40).trim()}...` : sourceText;
 
     dismissEditingContext();
-    setPendingSavedMeal({
+    setSavedMealDraft({
       items: sourceText,
+      suggestedName,
       totals: parsedResult.totals,
     });
-    setSavedMealName(suggestedName);
-    setSaveMealModalVisible(true);
-  }, [dismissEditingContext, entries, handleStartEditing, savedMeals, text]);
-
-  const handleConfirmSaveMeal = useCallback(() => {
-    const name = savedMealName.trim();
-    if (!name || !pendingSavedMeal) return;
-
-    journalHaptics.medium();
-    addSavedMeal({
-      name,
-      items: pendingSavedMeal.items,
-      calories: pendingSavedMeal.totals.calories,
-      protein_g: pendingSavedMeal.totals.protein_g,
-      carbs_g: pendingSavedMeal.totals.carbs_g,
-      fat_g: pendingSavedMeal.totals.fat_g,
-    });
-
-    setSaveMealModalVisible(false);
-    setSavedMealName("");
-    setPendingSavedMeal(null);
-    Alert.alert("Saved meal criada", `"${name}" foi salva para reutilizar no chat.`);
-  }, [addSavedMeal, pendingSavedMeal, savedMealName]);
-
-  const handleDeleteSavedMeal = useCallback((meal) => {
-    Alert.alert(
-      "Excluir refeicao salva?",
-      `A refeicao "${meal.name}" sera removida da lista.`,
-      [
-        { text: "Cancelar", style: "cancel" },
-        {
-          text: "Excluir",
-          style: "destructive",
-          onPress: () => {
-            journalHaptics.medium();
-            removeSavedMeal(meal.id);
-          },
-        },
-      ],
-    );
-  }, [removeSavedMeal]);
+    router.push("/(tabs)/(journal)/save-meal");
+  }, [dismissEditingContext, entries, handleStartEditing, router, savedMeals, setSavedMealDraft, text]);
 
   const handleToggleGoals = useCallback(() => {
     journalHaptics.selection();
-    setGoalsExpanded((v) => !v);
-  }, []);
-
-  const handleCloseGoals = useCallback(() => {
-    setGoalsExpanded(false);
-  }, []);
+    dismissEditingContext();
+    LayoutAnimation.configureNext(LayoutAnimation.Presets.easeInEaseOut);
+    setGoalsExpanded((current) => !current);
+  }, [dismissEditingContext]);
 
   const openCalendar = useCallback(() => {
     journalHaptics.light();
     dismissEditingContext();
-    calSheetRef.current?.expand();
-  }, [dismissEditingContext]);
+    router.push("/(tabs)/(journal)/calendar");
+  }, [dismissEditingContext, router]);
   const openSettings = useCallback(() => {
     journalHaptics.light();
     dismissEditingContext();
-    setSettingsView("main");
-    settingsSheetRef.current?.expand();
-  }, [dismissEditingContext]);
-  const openAiAssistant = useCallback(() => {
-    journalHaptics.light();
-    dismissEditingContext();
-    router.push("/ai");
+    router.push("/(tabs)/(journal)/settings");
   }, [dismissEditingContext, router]);
-  const openSavedMealsManager = useCallback(() => {
-    dismissEditingContext();
-    setSettingsView("savedMeals");
-  }, [dismissEditingContext]);
-  const closeCalendar = useCallback(() => {
-    journalHaptics.selection();
-    calSheetRef.current?.close();
-  }, []);
-  const closeSettings = useCallback(() => {
-    journalHaptics.selection();
-    setSettingsView("main");
-    settingsSheetRef.current?.close();
-  }, []);
 
   const openNutritionDetails = useCallback((detail) => {
     if (!detail || detail.type !== "ready") {
@@ -884,57 +816,12 @@ export default function Index() {
     }
 
     journalHaptics.light();
-    setSelectedNutritionDetail({
+    setNutritionDetail({
       ...detail,
       sources: getExternalSources(detail.sources),
     });
-    nutritionSheetRef.current?.expand();
-  }, []);
-
-  const closeNutritionDetails = useCallback(() => {
-    journalHaptics.selection();
-    nutritionSheetRef.current?.close();
-  }, []);
-  const handleOpenSourceUrl = useCallback(async (url) => {
-    if (!url) return;
-
-    try {
-      const supported = await Linking.canOpenURL(url);
-      if (!supported) {
-        return;
-      }
-
-      journalHaptics.selection();
-      await Linking.openURL(url);
-    } catch (error) {
-      console.warn("[nutrition] could not open source url:", error?.message);
-    }
-  }, []);
-
-  const markedDates = useMemo(() => {
-    const marks = {
-      [selectedDate]: {
-        selected: true,
-        selectedColor: C.accentGreen,
-        selectedTextColor: "#000",
-      },
-    };
-    if (selectedDate !== todayStr) {
-      marks[todayStr] = {
-        marked: true,
-        dotColor: C.accentPurple,
-        customStyles: {
-          container: {
-            borderWidth: 2,
-            borderColor: C.accentPurple,
-            borderRadius: 18,
-          },
-          text: { color: C.accentPurple, fontWeight: "600" },
-        },
-      };
-    }
-    return marks;
-  }, [selectedDate, todayStr, C]);
+    router.push("/(tabs)/(journal)/nutrition-details");
+  }, [router, setNutritionDetail]);
 
   /* render ---------------------------------------------------------------- */
   return (
@@ -956,51 +843,44 @@ export default function Index() {
         {/* Center: Date pill — true center via flex */}
         <View style={styles.headerCenter}>
           <TouchableOpacity onPress={openCalendar} activeOpacity={0.7}>
-            <GlassView isInteractive style={[styles.datePill, glass("rgba(255,255,255,0.10)")]}>
+            <HeaderCapsule fallback="rgba(255,255,255,0.10)" style={styles.datePill}>
               <Text style={[styles.dateLabel, { color: C.textPrimary }]}>{dateLabel}</Text>
-            </GlassView>
+            </HeaderCapsule>
           </TouchableOpacity>
         </View>
 
         {/* Right column — fixed width to match left */}
         <View style={styles.headerSideRight}>
           <View style={styles.headerActions}>
-            <GlassIconButton
-              onPress={openAiAssistant}
-              accessibilityLabel="Abrir assistente de IA"
-              symbolName="sparkles"
-              fallbackIconName="sparkles-outline"
-              color={C.accentBlue}
-              size={38}
-              iconSize={17}
-            />
-
             <TouchableOpacity onPress={openSettings} activeOpacity={0.7}>
-              <GlassView isInteractive style={[styles.rightPill, glass("rgba(255,255,255,0.10)")]}>
-                <Text style={styles.streakText}>🔥</Text>
+              <HeaderCapsule fallback="rgba(255,255,255,0.10)" style={styles.rightPill}>
+                <AppSymbol
+                  color={C.accentOrange}
+                  name="flame.fill"
+                  size={15}
+                  style={styles.streakSymbol}
+                  weight="medium"
+                />
                 <Text style={[styles.streakCount, { color: C.textPrimary }]}>1</Text>
                 <View style={styles.pillDivider} />
-                {Platform.OS === "ios" ? (
-                  <SymbolView
-                    name="gear"
-                    style={styles.gearSymbol}
-                    type="monochrome"
-                    tintColor={C.textSecondary}
-                  />
-                ) : (
-                  <Text style={[styles.gearIcon, { color: C.textSecondary }]}>⚙</Text>
-                )}
-              </GlassView>
+                <AppSymbol
+                  color={C.textSecondary}
+                  name="gearshape"
+                  size={16}
+                  style={styles.gearSymbol}
+                  weight="regular"
+                />
+              </HeaderCapsule>
             </TouchableOpacity>
           </View>
         </View>
       </View>
 
       {/* ── Content ─────────────────────────────────────────────────────── */}
-        <KeyboardAvoidingView
-          style={styles.flex}
-          behavior={Platform.OS === "ios" ? "padding" : "height"}
-          keyboardVerticalOffset={0}
+      <KeyboardAvoidingView
+        style={styles.flex}
+        behavior={Platform.OS === "ios" ? "padding" : "height"}
+        keyboardVerticalOffset={0}
       >
         {/* ── 3-page horizontal day swiper ────────────────────────────── */}
         <FlatList
@@ -1016,7 +896,7 @@ export default function Index() {
           data={[prevDate, selectedDate, nextDate]}
           keyExtractor={(date) => date}
           initialScrollIndex={1}
-          getItemLayout={(_, index) => ({ length: width, offset: width * index, index })}
+          getItemLayout={(_, index) => ({ length: windowWidth, offset: windowWidth * index, index })}
               renderItem={({ item: date, index: idx }) => {
                 const isActive = idx === 1;
                 const dayEntries = isActive ? entries : getEntriesForDate(date);
@@ -1029,8 +909,16 @@ export default function Index() {
                 return (
               <ScrollView
                 ref={isActive ? scrollRef : null}
-                style={{ width }}
-                contentContainerStyle={styles.scrollContent}
+                 onScroll={isActive ? handleJournalScroll : undefined}
+                scrollEventThrottle={isActive ? tabBarScrollEventThrottle : undefined}
+                scrollIndicatorInsets={{
+                  bottom: scrollIndicatorBottomInset,
+                }}
+                style={{ width: windowWidth }}
+                contentContainerStyle={[
+                  styles.scrollContent,
+                  { paddingBottom: contentBottomInset },
+                ]}
                 keyboardShouldPersistTaps="always"
                 showsVerticalScrollIndicator={false}
               >
@@ -1183,65 +1071,52 @@ export default function Index() {
           }}
         />
 
-        {!isEditing && goalsExpanded ? (
-          <TouchableOpacity
-            activeOpacity={1}
-            onPress={handleCloseGoals}
-            style={styles.goalsDismissOverlay}
-            accessibilityRole="button"
-            accessibilityLabel="Fechar painel de metas"
+      </KeyboardAvoidingView>
+
+      <View
+        style={[
+          styles.bottomContainer,
+          {
+            bottom: keyboardVisible && isEditing
+              ? keyboardHeight
+              : WEB_BOTTOM_INSET + overlayBottomOffset - (Platform.OS === "ios" ? 3 : 0),
+            paddingBottom: keyboardVisible && isEditing
+              ? 0
+              : undefined,
+          },
+        ]}
+      >
+        <AnimatePresence>
+          {goalsExpanded && !isEditing && !keyboardVisible ? (
+            <MotiView
+              animate={{ opacity: 1, translateY: 0 }}
+              exit={{ opacity: 0, translateY: 16 }}
+              from={{ opacity: 0, translateY: 16 }}
+              transition={{ type: "timing", duration: 220 }}
+            >
+              <GoalsPanel totals={totals} />
+            </MotiView>
+          ) : null}
+        </AnimatePresence>
+
+        {!isEditing ? (
+          <LegacyJournalSummaryBar
+            goalsExpanded={goalsExpanded}
+            onToggleGoals={handleToggleGoals}
+            totals={totals}
           />
         ) : null}
 
-        <View
-          style={[
-            styles.bottomContainer,
-            {
-              bottom: keyboardVisible && isEditing
-                ? keyboardHeight
-                : insets.bottom + WEB_BOTTOM_INSET,
-              paddingBottom: keyboardVisible && isEditing ? 0 : undefined,
-            },
-          ]}
-          >
-            <AnimatePresence>
-              {!isEditing && goalsExpanded ? (
-                <MotiView
-                  style={styles.bottomGoalsPanel}
-                  from={{ opacity: 0, translateY: 12, scale: 0.98 }}
-                  animate={{ opacity: 1, translateY: 0, scale: 1 }}
-                  exit={{ opacity: 0, translateY: 12, scale: 0.98 }}
-                  transition={{
-                    type: "spring",
-                    damping: 18,
-                    stiffness: 180,
-                    mass: 0.8,
-                  }}
-                >
-                  <GoalsPanel totals={totals} />
-                </MotiView>
-              ) : null}
-            </AnimatePresence>
-
-            {!isEditing ? (
-              <JournalSummaryBar
-                totals={totals}
-                goalsExpanded={goalsExpanded}
-                onToggleGoals={handleToggleGoals}
-              />
-            ) : null}
-
-            <ActionBar
-              totals={totals}
-              isEditing={isEditing}
-            isListening={isListening}
-            onToggleMic={handleToggleMic}
-            onOpenCamera={handleOpenCamera}
-            onAddSavedMeal={handleAddSavedMeal}
-            onDismissKeyboard={handleDismissKeyboard}
-          />
-        </View>
-      </KeyboardAvoidingView>
+        <ActionBar
+          totals={totals}
+          isEditing={isEditing}
+          isListening={isListening}
+          onToggleMic={handleToggleMic}
+          onOpenCamera={handleOpenCamera}
+          onAddSavedMeal={handleAddSavedMeal}
+          onDismissKeyboard={handleDismissKeyboard}
+        />
+      </View>
 
       {/* ── Camera context menu ────────────────────────────────────────── */}
       <Modal
@@ -1264,15 +1139,13 @@ export default function Index() {
                 activeOpacity={0.6}
                 onPress={() => handleCameraMenuAction("scan")}
               >
-                {Platform.OS === "ios" ? (
-                  <SymbolView
-                    name="doc.text.viewfinder"
-                    style={styles.cameraMenuSymbol}
-                    tintColor={C.accentBlue}
-                  />
-                ) : (
-                  <Text style={[styles.cameraMenuSymbol, { fontSize: 18, textAlign: "center" }]}>📄</Text>
-                )}
+                <AppSymbol
+                  color={C.accentBlue}
+                  name="doc.text.viewfinder"
+                  size={20}
+                  style={styles.cameraMenuSymbol}
+                  weight="medium"
+                />
                 <Text style={[styles.cameraMenuLabel, { color: C.textPrimary }]}>Scan Menu</Text>
               </TouchableOpacity>
 
@@ -1283,15 +1156,13 @@ export default function Index() {
                 activeOpacity={0.6}
                 onPress={() => handleCameraMenuAction("library")}
               >
-                {Platform.OS === "ios" ? (
-                  <SymbolView
-                    name="photo.on.rectangle"
-                    style={styles.cameraMenuSymbol}
-                    tintColor={C.accentGreen}
-                  />
-                ) : (
-                  <Text style={[styles.cameraMenuSymbol, { fontSize: 18, textAlign: "center" }]}>🖼️</Text>
-                )}
+                <AppSymbol
+                  color={C.accentGreen}
+                  name="photo.on.rectangle"
+                  size={20}
+                  style={styles.cameraMenuSymbol}
+                  weight="medium"
+                />
                 <Text style={[styles.cameraMenuLabel, { color: C.textPrimary }]}>Choose from Library</Text>
               </TouchableOpacity>
 
@@ -1302,21 +1173,21 @@ export default function Index() {
                 activeOpacity={0.6}
                 onPress={() => handleCameraMenuAction("camera")}
               >
-                {Platform.OS === "ios" ? (
-                  <SymbolView
-                    name="camera"
-                    style={styles.cameraMenuSymbol}
-                    tintColor={C.accentPink}
-                  />
-                ) : (
-                  <Text style={[styles.cameraMenuSymbol, { fontSize: 18, textAlign: "center" }]}>📷</Text>
-                )}
+                <AppSymbol
+                  color={C.accentPink}
+                  name="camera"
+                  size={20}
+                  style={styles.cameraMenuSymbol}
+                  weight="medium"
+                />
                 <Text style={[styles.cameraMenuLabel, { color: C.textPrimary }]}>Take Photo</Text>
               </TouchableOpacity>
             </GlassView>
           </View>
         </View>
       </Modal>
+      {false ? (
+        <>
 
       {/* ── Calendar sheet ──────────────────────────────────────────────── */}
       <BottomSheet
@@ -1349,7 +1220,13 @@ export default function Index() {
             markingType="custom"
             hideArrows={false}
             renderArrow={(dir) => (
-              <Text style={[styles.calArrow, { color: C.textSecondary }]}>{dir === "left" ? "‹" : "›"}</Text>
+              <AppSymbol
+                color={C.textSecondary}
+                name={dir === "left" ? "chevron.left" : "chevron.right"}
+                size={18}
+                style={styles.calArrow}
+                weight="medium"
+              />
             )}
             theme={{
               calendarBackground: "transparent",
@@ -1392,7 +1269,6 @@ export default function Index() {
                 onPress={closeSettings}
                 accessibilityLabel="Fechar ajustes"
                 symbolName="xmark"
-                fallbackIconName="close"
                 color={C.textSecondary}
               />
             </View>
@@ -1406,12 +1282,12 @@ export default function Index() {
             <SectionTitle title="Goals & Targets" />
             <Card>
               <NavRow
-                badge="⚖️" badgeColor="#3b82f6" sfName="scalemass.fill"
+                badgeColor="#3b82f6" sfName="scalemass.fill"
                 label="61.5 kg"
-                sublabel="🔥 2,729 cal · P 136g · C 303g · F 91g"
+                sublabel="2,729 cal · P 136g · C 303g · F 91g"
               />
               <NavRow
-                badge="📊" badgeColor="#3b82f6" sfName="chart.bar.fill"
+                badgeColor="#3b82f6" sfName="chart.bar.fill"
                 label="Manage Nutrition Goals"
                 onPress={() => {}} isLast
               />
@@ -1420,12 +1296,12 @@ export default function Index() {
             <SectionTitle title="Health Profile" />
             <Card>
               <NavRow
-                badge="❤️" badgeColor="#ef4444" sfName="heart.fill"
+                badgeColor="#ef4444" sfName="heart.fill"
                 label="61.5 kg (current weight)"
                 sublabel="Moderately Active"
               />
               <NavRow
-                badge="📋" badgeColor="#ef4444" sfName="doc.text.fill"
+                badgeColor="#ef4444" sfName="doc.text.fill"
                 label="Manage Health Info"
                 onPress={() => {}} isLast
               />
@@ -1434,7 +1310,7 @@ export default function Index() {
             <SectionTitle title="Weight Tracking" />
             <Card>
               <NavRow
-                badge="📉" badgeColor="#a855f7" sfName="chart.line.downtrend.xyaxis"
+                badgeColor="#a855f7" sfName="chart.line.downtrend.xyaxis"
                 label="61.5 kg"
                 sublabel="Log weight to see trends"
                 onPress={() => {}} isLast
@@ -1444,7 +1320,7 @@ export default function Index() {
             <SectionTitle title="Saved Meals" />
             <Card>
               <NavRow
-                badge="🍽️" badgeColor="#f97316" sfName="fork.knife"
+                badgeColor="#f97316" sfName="fork.knife"
                 label="Manage Saved Meals"
                 sublabel={savedMealsLabel}
                 onPress={openSavedMealsManager} isLast
@@ -1454,13 +1330,13 @@ export default function Index() {
             <SectionTitle title="Preferences" />
             <Card>
               <NavRow
-                badge="🎯" badgeColor="#f97316" sfName="target"
+                badgeColor="#f97316" sfName="target"
                 label="Calorie Estimate Bias"
                 sublabel="Accurate"
                 onPress={() => {}}
               />
               <ToggleRow
-                badge="🔔" badgeColor="#f97316" sfName="bell.fill"
+                badgeColor="#f97316" sfName="bell.fill"
                 label="Daily Tracking Reminders"
                 value={reminders}
                 onToggle={() => setReminders(v => !v)}
@@ -1472,13 +1348,13 @@ export default function Index() {
             <Card>
               <AppearanceRow colorMode={colorMode} onToggle={handleToggleAppearance} />
               <ToggleRow
-                badge="🕐" badgeColor="#22c55e" sfName="clock.fill"
+                badgeColor="#22c55e" sfName="clock.fill"
                 label="Automatic Time Zone"
                 value={autoTimeZone}
                 onToggle={() => setAutoTimeZone(v => !v)}
               />
               <NavRow
-                badge="🎤" badgeColor="#3b82f6" sfName="mic.fill"
+                badgeColor="#3b82f6" sfName="mic.fill"
                 label="Dictation Language"
                 value="Auto-detect ▾"
                 isLast
@@ -1488,7 +1364,7 @@ export default function Index() {
             <SectionTitle title="Subscription" />
             <Card>
               <NavRow
-                badge="👑" badgeColor="#eab308" sfName="crown.fill"
+                badgeColor="#eab308" sfName="crown.fill"
                 label="Subscription Active"
                 sublabel="Tasanka 3 Apr 2025"
               />
@@ -1496,17 +1372,17 @@ export default function Index() {
             </Card>
 
             <Card>
-              <NavRow badge="⭐" badgeColor="#a855f7" sfName="star.fill" label="Give Feedback" onPress={() => {}} />
-              <NavRow badge="💜" badgeColor="#a855f7" sfName="info.circle.fill" label="About the App" onPress={() => {}} isLast />
+              <NavRow badgeColor="#a855f7" sfName="star.fill" label="Give Feedback" onPress={() => {}} />
+              <NavRow badgeColor="#a855f7" sfName="info.circle.fill" label="About the App" onPress={() => {}} isLast />
             </Card>
 
             {/* Destructive */}
             <Card>
-              <NavRow badge="💬" badgeColor="#3b82f6" sfName="bubble.left.fill"  label="Contact Support" onPress={() => {}} />
-              <NavRow badge="🗑️" badgeColor="#636366" sfName="trash.fill"         label="Clear Local Cache" onPress={() => {}} />
-              <NavRow badge="📤" badgeColor="#f97316" sfName="square.and.arrow.up.fill" label="Export Data" onPress={() => {}} />
-              <NavRow badge="⚠️" badgeColor="#ef4444" sfName="exclamationmark.triangle.fill" label="Delete Account" onPress={() => {}} />
-              <NavRow badge="🚪" badgeColor="#ef4444" sfName="rectangle.portrait.and.arrow.right.fill" label="Sign Out" onPress={() => {}} isLast />
+              <NavRow badgeColor="#3b82f6" sfName="bubble.left.fill" label="Contact Support" onPress={() => {}} />
+              <NavRow badgeColor="#636366" sfName="trash.fill" label="Clear Local Cache" onPress={() => {}} />
+              <NavRow badgeColor="#f97316" sfName="square.and.arrow.up.fill" label="Export Data" onPress={() => {}} />
+              <NavRow badgeColor="#ef4444" sfName="exclamationmark.triangle.fill" label="Delete Account" onPress={() => {}} />
+              <NavRow badgeColor="#ef4444" sfName="rectangle.portrait.and.arrow.right.fill" label="Sign Out" onPress={() => {}} isLast />
             </Card>
           </BottomSheetScrollView>
       </BottomSheet>
@@ -1527,7 +1403,6 @@ export default function Index() {
               onPress={closeNutritionDetails}
               accessibilityLabel="Fechar detalhes nutricionais"
               symbolName="xmark"
-              fallbackIconName="close"
               color={C.textSecondary}
             />
           </View>
@@ -1650,7 +1525,6 @@ export default function Index() {
                 onPress={() => setSettingsView("main")}
                 accessibilityLabel="Voltar para ajustes"
                 symbolName="chevron.left"
-                fallbackIconName="chevron-back"
                 color={C.textSecondary}
               />
               <Text style={[styles.managerTitle, { color: C.textPrimary }]}>Saved Meals</Text>
@@ -1658,7 +1532,6 @@ export default function Index() {
                 onPress={() => setSettingsView("main")}
                 accessibilityLabel="Fechar refeicoes salvas"
                 symbolName="xmark"
-                fallbackIconName="close"
                 color={C.textSecondary}
               />
             </View>
@@ -1684,17 +1557,24 @@ export default function Index() {
                         onPress={() => handleDeleteSavedMeal(meal)}
                         accessibilityLabel={`Remover ${meal.name}`}
                         symbolName="xmark"
-                        fallbackIconName="close"
                         tone="destructive"
                         color={C.accentRed}
                         size={30}
                         iconSize={14}
                       />
                     </View>
-                    <Text style={[styles.savedMealMacros, { color: C.textSecondary }]}>
-                      🔥 {Math.round(meal.calories)} cal · P {Math.round(meal.protein_g)}g ·
-                      {" "}C {Math.round(meal.carbs_g)}g · F {Math.round(meal.fat_g)}g
-                    </Text>
+                    <View style={styles.savedMealMacroRow}>
+                      <AppSymbol
+                        color={C.accentOrange}
+                        name="flame.fill"
+                        size={12}
+                        weight="medium"
+                      />
+                      <Text style={[styles.savedMealMacros, { color: C.textSecondary }]}>
+                        {Math.round(meal.calories)} cal · P {Math.round(meal.protein_g)}g ·
+                        {" "}C {Math.round(meal.carbs_g)}g · F {Math.round(meal.fat_g)}g
+                      </Text>
+                    </View>
                     <Text style={[styles.savedMealItems, { color: C.textTertiary }]}>{meal.items}</Text>
                   </GlassView>
                 ))
@@ -1730,12 +1610,20 @@ export default function Index() {
             />
 
             {pendingSavedMeal ? (
-              <Text style={[styles.modalMacros, { color: C.textSecondary }]}>
-                🔥 {Math.round(pendingSavedMeal.totals.calories)} cal · P{" "}
-                {Math.round(pendingSavedMeal.totals.protein_g)}g · C{" "}
-                {Math.round(pendingSavedMeal.totals.carbs_g)}g · F{" "}
-                {Math.round(pendingSavedMeal.totals.fat_g)}g
-              </Text>
+              <View style={styles.modalMacroRow}>
+                <AppSymbol
+                  color={C.accentOrange}
+                  name="flame.fill"
+                  size={12}
+                  weight="medium"
+                />
+                <Text style={[styles.modalMacros, { color: C.textSecondary }]}>
+                  {Math.round(pendingSavedMeal.totals.calories)} cal · P{" "}
+                  {Math.round(pendingSavedMeal.totals.protein_g)}g · C{" "}
+                  {Math.round(pendingSavedMeal.totals.carbs_g)}g · F{" "}
+                  {Math.round(pendingSavedMeal.totals.fat_g)}g
+                </Text>
+              </View>
             ) : null}
 
             <View style={styles.modalActions}>
@@ -1760,6 +1648,8 @@ export default function Index() {
           </GlassView>
         </View>
       </Modal>
+        </>
+      ) : null}
     </View>
   );
 }
@@ -1775,13 +1665,6 @@ const styles = StyleSheet.create({
     left: 0,
     right: 0,
   },
-  goalsDismissOverlay: {
-    ...StyleSheet.absoluteFillObject,
-  },
-  bottomGoalsPanel: {
-    paddingBottom: spacing.xs,
-  },
-
   /* Header */
   header: {
     flexDirection: "row",
@@ -1810,6 +1693,10 @@ const styles = StyleSheet.create({
     alignItems: "center",
     justifyContent: "center",
   },
+  headerCapsuleNative: {
+    borderWidth: StyleSheet.hairlineWidth,
+    borderCurve: "continuous",
+  },
 
   /* Date pill */
   datePill: {
@@ -1829,7 +1716,7 @@ const styles = StyleSheet.create({
     borderRadius: radius.full,
     gap: spacing.xs,
   },
-  streakText:  { fontSize: 15 },
+  streakSymbol: { marginTop: 1 },
   streakCount: { fontSize: 14, fontWeight: "600", color: colors.textPrimary },
   pillDivider: {
     width: 1,
@@ -1837,13 +1724,11 @@ const styles = StyleSheet.create({
     backgroundColor: "rgba(255,255,255,0.15)",
     marginHorizontal: spacing.xs,
   },
-  gearIcon:   { fontSize: 15, color: colors.textSecondary },
   gearSymbol: { width: 16, height: 16 },
 
   scrollContent: {
     paddingHorizontal: spacing.xl,
     paddingTop: spacing.lg,
-    paddingBottom: 120,
     flexGrow: 1,
   },
   noteSection: {
@@ -1937,7 +1822,7 @@ const styles = StyleSheet.create({
   },
   calAction: { fontSize: 16, fontWeight: "500", color: colors.accentBlue },
   calMonth:  { ...typography.headline, fontWeight: "600" },
-  calArrow:  { fontSize: 22, color: colors.textSecondary, lineHeight: 26 },
+  calArrow:  { width: 20, height: 20 },
 
   /* Settings sheet */
   settingsContent: { paddingHorizontal: spacing.xl, paddingTop: spacing.sm },
@@ -2127,6 +2012,12 @@ const styles = StyleSheet.create({
     justifyContent: "space-between",
     gap: spacing.md,
   },
+  savedMealMacroRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: spacing.xs,
+    marginTop: spacing.sm,
+  },
   savedMealName: {
     ...typography.subhead,
     color: colors.textPrimary,
@@ -2135,7 +2026,6 @@ const styles = StyleSheet.create({
   savedMealMacros: {
     ...typography.footnote,
     color: colors.systemGray,
-    marginTop: spacing.sm,
   },
   savedMealItems: {
     ...typography.caption1,
@@ -2165,6 +2055,11 @@ const styles = StyleSheet.create({
   modalMacros: {
     ...typography.footnote,
     color: colors.systemGray,
+  },
+  modalMacroRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: spacing.xs,
     marginTop: spacing.md,
   },
   modalActions: {
@@ -2282,7 +2177,7 @@ const sS = StyleSheet.create({
   rowLabel: { fontSize: 16, fontWeight: "400", letterSpacing: -0.2, color: "#f5f5f5" },
   rowSub: { fontSize: 12, marginTop: 2, letterSpacing: -0.1, color: "#8e8e93" },
   rowVal:  { fontSize: 14, color: "#8e8e93" },
-  chevron: { fontSize: 20, lineHeight: 24, color: "#48484a" },
+  chevron: { marginLeft: spacing.xs },
 
   /* iOS-style icon badge — colored rounded square */
   iconBadge: {
@@ -2299,8 +2194,6 @@ const sS = StyleSheet.create({
     overflow: "hidden",
     flexShrink: 0,
   },
-  badgeIcon: { fontSize: 18, lineHeight: 20 },
-
   /* Appearance segmented control */
   segmentedControl: {
     flexDirection: "row",

@@ -1,7 +1,7 @@
 import { env } from "../../config/env.js";
 import { AppError } from "../../lib/errors.js";
 import { logger } from "../../lib/logger.js";
-import { openai } from "../../lib/openai.js";
+import { getOpenAI } from "../../lib/openai.js";
 import type {
   ChatRequest,
   ToolChatRequest,
@@ -22,6 +22,7 @@ function buildWebTool(forceWeb: boolean) {
 }
 
 export async function createChatResponse(request: ChatRequest) {
+  const openai = getOpenAI();
   const response = await openai.responses.create({
     model: request.model ?? (request.useWeb ? env.OPENAI_WEB_MODEL : env.OPENAI_DEFAULT_MODEL),
     instructions: request.systemPrompt,
@@ -37,6 +38,7 @@ export async function createVisionResponse(
   request: VisionRequest,
   file: Express.Multer.File,
 ) {
+  const openai = getOpenAI();
   const imageDataUrl = `data:${file.mimetype};base64,${file.buffer.toString("base64")}`;
   const history = buildConversationInput(request.history ?? []);
   const prompt = request.input?.trim() || "Analyze this image.";
@@ -54,6 +56,7 @@ export async function createVisionResponse(
 }
 
 export async function createToolChatResponse(request: ToolChatRequest) {
+  const openai = getOpenAI();
   let response = await openai.responses.create({
     model: request.model ?? env.OPENAI_TOOL_MODEL,
     instructions: request.systemPrompt,

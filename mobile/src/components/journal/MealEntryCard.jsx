@@ -69,7 +69,6 @@ export function MealEntryCard({ entry, onDelete }) {
               onPress={() => onDelete(entry.id)}
               accessibilityLabel="Remover refeicao"
               symbolName="xmark"
-              fallbackIconName="close"
               color={C.textTertiary}
               tone="destructive"
               size={28}

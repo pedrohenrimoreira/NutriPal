@@ -19,10 +19,53 @@ function createId() {
   return `saved-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
 }
 
+function createWeightEntry(weightKg, date = new Date().toISOString().slice(0, 10)) {
+  return {
+    id: createId(),
+    createdAt: new Date().toISOString(),
+    date,
+    weightKg,
+  };
+}
+
 export const useSettingsStore = create(
   persist(
     (set, get) => ({
+      autoTimeZone: true,
+      calorieEstimateBias: "accurate",
+      dictationLanguage: "auto",
+      healthProfile: {
+        activityLevel: "moderate",
+        currentWeightKg: 61.5,
+      },
+      nutritionGoals: {
+        calories: 2729,
+        carbs_g: 303,
+        fat_g: 91,
+        protein_g: 136,
+      },
+      reminders: false,
       savedMeals: [],
+      weightEntries: [createWeightEntry(61.5)],
+
+      setAutoTimeZone: (autoTimeZone) => set({ autoTimeZone }),
+      setCalorieEstimateBias: (calorieEstimateBias) => set({ calorieEstimateBias }),
+      setDictationLanguage: (dictationLanguage) => set({ dictationLanguage }),
+      setHealthProfile: (updates) =>
+        set((state) => ({
+          healthProfile: {
+            ...state.healthProfile,
+            ...updates,
+          },
+        })),
+      setNutritionGoals: (updates) =>
+        set((state) => ({
+          nutritionGoals: {
+            ...state.nutritionGoals,
+            ...updates,
+          },
+        })),
+      setReminders: (reminders) => set({ reminders }),
 
       addSavedMeal: (meal) =>
         set((state) => {
@@ -43,6 +86,36 @@ export const useSettingsStore = create(
           savedMeals: state.savedMeals.filter((meal) => meal.id !== id),
         })),
 
+      addWeightEntry: ({ date, weightKg }) =>
+        set((state) => {
+          const numericWeight = Number(weightKg);
+          if (!Number.isFinite(numericWeight) || numericWeight <= 0) {
+            return state;
+          }
+
+          return {
+            healthProfile: {
+              ...state.healthProfile,
+              currentWeightKg: numericWeight,
+            },
+            weightEntries: [createWeightEntry(numericWeight, date), ...state.weightEntries],
+          };
+        }),
+
+      removeWeightEntry: (id) =>
+        set((state) => {
+          const weightEntries = state.weightEntries.filter((entry) => entry.id !== id);
+          const latestWeight = weightEntries[0]?.weightKg ?? state.healthProfile.currentWeightKg;
+
+          return {
+            healthProfile: {
+              ...state.healthProfile,
+              currentWeightKg: latestWeight,
+            },
+            weightEntries,
+          };
+        }),
+
       getSavedMealByText: (text) => {
         const normalized = normalizeMealKey(text);
         if (!normalized) return null;
@@ -60,7 +133,16 @@ export const useSettingsStore = create(
     {
       name: "nutripal-settings",
       storage: createJSONStorage(() => AsyncStorage),
-      partialize: (state) => ({ savedMeals: state.savedMeals }),
+      partialize: (state) => ({
+        autoTimeZone: state.autoTimeZone,
+        calorieEstimateBias: state.calorieEstimateBias,
+        dictationLanguage: state.dictationLanguage,
+        healthProfile: state.healthProfile,
+        nutritionGoals: state.nutritionGoals,
+        reminders: state.reminders,
+        savedMeals: state.savedMeals,
+        weightEntries: state.weightEntries,
+      }),
     },
   ),
 );

@@ -1,8 +1,9 @@
 /**
  * GoalsPanel — detailed nutrition breakdown.
  *
- * Expanded by the ActionBar nutrition pill tap.
- * Animated in/out by the parent (AnimatePresence + MotiView in index.jsx).
+ * Restored legacy inline card used by the Journal nutrition bar.
+ * This stays available so the older expand/collapse flow can be used
+ * without the newer compact card/modal implementation.
  */
 import React from "react";
 import { View, Text, StyleSheet } from "react-native";
@@ -12,12 +13,10 @@ import { spacing, radius, typography } from "../../theme";
 
 const DEFAULT_GOALS = {
   calories: 2729,
-  carbs_g:  303,
+  carbs_g: 303,
   protein_g: 136,
-  fat_g:     91,
+  fat_g: 91,
 };
-
-/* ── sub-components ────────────────────────────────────────────────────────── */
 
 function ProgressBar({ pct, color }) {
   return (
@@ -50,10 +49,12 @@ function GoalRow({ icon, label, right, C }) {
 function MacroCircle({ value, label, color, C }) {
   return (
     <View style={styles.circleWrap}>
-      <View style={[
-        styles.circle,
-        { borderColor: value > 0 ? color : C.separator },
-      ]}>
+      <View
+        style={[
+          styles.circle,
+          { borderColor: value > 0 ? color : C.separator },
+        ]}
+      >
         <Text style={[styles.circleVal, { color: C.textPrimary }]}>{value}</Text>
       </View>
       <Text style={[styles.circleLabel, { color: C.textSecondary }]}>{label}</Text>
@@ -61,16 +62,14 @@ function MacroCircle({ value, label, color, C }) {
   );
 }
 
-/* ── main component ────────────────────────────────────────────────────────── */
-
 export function GoalsPanel({ totals }) {
-  const C = useThemeStore((s) => s.colors);
-  const colorMode = useThemeStore((s) => s.colorMode);
+  const C = useThemeStore((store) => store.colors);
+  const colorMode = useThemeStore((store) => store.colorMode);
 
-  const cal   = Math.round(totals.calories);
+  const cal = Math.round(totals.calories);
   const carbs = Math.round(totals.carbs_g);
-  const prot  = Math.round(totals.protein_g);
-  const fat   = Math.round(totals.fat_g);
+  const prot = Math.round(totals.protein_g);
+  const fat = Math.round(totals.fat_g);
 
   const calPct = (cal / DEFAULT_GOALS.calories) * 100;
   const panelTone = colorMode === "dark"
@@ -94,100 +93,115 @@ export function GoalsPanel({ totals }) {
       >
         <Text style={[styles.title, { color: C.textPrimary }]}>Goals</Text>
 
-      <GoalRow
-        icon="🔥"
-        label="Calories"
-        right={`${cal} / ${DEFAULT_GOALS.calories}`}
-        C={C}
-      />
-      <ProgressBar pct={calPct} color={C.accentOrange} />
+        <GoalRow
+          C={C}
+          icon="🔥"
+          label="Calories"
+          right={`${cal} / ${DEFAULT_GOALS.calories}`}
+        />
+        <ProgressBar pct={calPct} color={C.accentOrange} />
 
-      <View style={styles.rowGap} />
-      <GoalRow icon="🚶" label="Burned" right="0" C={C} />
-      <ProgressBar pct={0} color={C.accentGreen} />
+        <View style={styles.rowGap} />
 
-      <View style={styles.circleRow}>
-        <MacroCircle value={carbs} label="Carbs"   color={C.carbs}   C={C} />
-        <MacroCircle value={prot}  label="Protein" color={C.protein} C={C} />
-        <MacroCircle value={fat}   label="Fat"     color={C.fat}     C={C} />
-      </View>
+        <GoalRow
+          C={C}
+          icon="🚶"
+          label="Burned"
+          right="0"
+        />
+        <ProgressBar pct={0} color={C.accentGreen} />
 
         <View style={styles.circleRow}>
-          <MacroCircle value={0} label="Sugar"  color={C.accentPink}  C={C} />
-          <MacroCircle value={0} label="Fiber"  color={C.accentGreen} C={C} />
-          <MacroCircle value={0} label="Sodium" color={C.accentBlue}  C={C} />
+          <MacroCircle C={C} color={C.carbs} label="Carbs" value={carbs} />
+          <MacroCircle C={C} color={C.protein} label="Protein" value={prot} />
+          <MacroCircle C={C} color={C.fat} label="Fat" value={fat} />
+        </View>
+
+        <View style={styles.circleRow}>
+          <MacroCircle C={C} color={C.accentPink} label="Sugar" value={0} />
+          <MacroCircle C={C} color={C.accentGreen} label="Fiber" value={0} />
+          <MacroCircle C={C} color={C.accentBlue} label="Sodium" value={0} />
         </View>
       </GlassView>
     </View>
   );
 }
 
-/* ── styles ────────────────────────────────────────────────────────────────── */
-
 const styles = StyleSheet.create({
   cardShell: {
     marginHorizontal: spacing.xl,
     marginBottom: spacing.sm,
-    borderRadius: radius.xl,
     borderCurve: "continuous",
+    borderRadius: radius.xl,
+    elevation: 6,
     shadowColor: "#000",
     shadowOffset: { width: 0, height: 4 },
     shadowOpacity: 0.15,
     shadowRadius: 12,
-    elevation: 6,
   },
   card: {
-    borderRadius: radius.xl,
+    borderColor: "rgba(255,255,255,0.16)",
     borderCurve: "continuous",
+    borderRadius: radius.xl,
+    borderWidth: 1,
     overflow: "hidden",
     padding: spacing.xl,
-    borderWidth: 1,
-    borderColor: "rgba(255,255,255,0.16)",
   },
   title: {
     ...typography.headline,
     marginBottom: spacing.lg,
   },
-
   goalRow: {
+    alignItems: "center",
     flexDirection: "row",
     justifyContent: "space-between",
-    alignItems: "center",
     marginBottom: spacing.sm,
   },
   goalLeft: {
-    flexDirection: "row",
     alignItems: "center",
+    flexDirection: "row",
     gap: spacing.sm,
   },
-  goalIcon:  { fontSize: 16 },
-  goalLabel: { ...typography.subhead },
-  goalRight: { ...typography.footnote },
-  rowGap:    { height: spacing.md },
-
-  track: {
-    height: 4,
-    borderRadius: 2,
-    backgroundColor: "rgba(255,255,255,0.10)",
-    overflow: "hidden",
-    marginBottom: spacing.xs,
+  goalIcon: {
+    fontSize: 16,
   },
-  fill: { height: "100%", borderRadius: 2 },
-
+  goalLabel: {
+    ...typography.subhead,
+  },
+  goalRight: {
+    ...typography.footnote,
+  },
+  rowGap: {
+    height: spacing.md,
+  },
+  track: {
+    backgroundColor: "rgba(255,255,255,0.10)",
+    borderRadius: 2,
+    height: 4,
+    marginBottom: spacing.xs,
+    overflow: "hidden",
+  },
+  fill: {
+    borderRadius: 2,
+    height: "100%",
+  },
   circleRow: {
     flexDirection: "row",
     justifyContent: "space-around",
     marginTop: spacing.lg,
   },
-  circleWrap:  { alignItems: "center", gap: spacing.xs },
+  circleWrap: {
+    alignItems: "center",
+    gap: spacing.xs,
+  },
   circle: {
-    width: 60,
-    height: 60,
+    alignItems: "center",
+    backgroundColor: "rgba(255,255,255,0.05)",
     borderRadius: 30,
     borderWidth: 2,
-    alignItems: "center",
+    height: 60,
     justifyContent: "center",
-    backgroundColor: "rgba(255,255,255,0.05)",
+    width: 60,
   },
   circleVal: {
     fontSize: 16,
@@ -197,3 +211,5 @@ const styles = StyleSheet.create({
     ...typography.caption1,
   },
 });
+
+export default GoalsPanel;

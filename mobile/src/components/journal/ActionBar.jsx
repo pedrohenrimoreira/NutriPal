@@ -8,6 +8,7 @@ import { GlassView, isLiquidGlassAvailable } from "expo-glass-effect";
 import { useThemeStore } from "../../store/themeStore";
 import { spacing, radius } from "../../theme";
 import { GlassIconButton } from "../GlassIconButton";
+import { AppSymbol } from "../icons/AppSymbol";
 
 const glass = (fallback) =>
   isLiquidGlassAvailable() ? {} : { backgroundColor: fallback };
@@ -34,14 +35,19 @@ export function ActionBar({
         isInteractive
         style={[styles.calCapsule, glass("rgba(255,255,255,0.10)")]}
       >
-        <Text style={styles.capsuleFlame}>{"\u{1F525}"}</Text>
+        <AppSymbol
+          color={C.accentOrange}
+          name="flame.fill"
+          size={14}
+          style={styles.capsuleSymbol}
+          weight="medium"
+        />
         <Text style={[styles.capsuleVal, { color: C.textPrimary }]}>{cal}</Text>
       </GlassView>
 
       <View style={styles.btnRow}>
         <GlassIconButton
           symbolName={isListening ? "mic.fill" : "mic"}
-          fallbackIconName="mic"
           color={isListening ? C.accentRed : C.accentBlue}
           onPress={onToggleMic}
           accessibilityLabel={isListening ? "Parar ditado" : "Iniciar ditado"}
@@ -51,7 +57,6 @@ export function ActionBar({
         />
         <GlassIconButton
           symbolName="camera"
-          fallbackIconName="camera-outline"
           color={C.accentPink}
           onPress={onOpenCamera}
           accessibilityLabel="Adicionar foto"
@@ -60,7 +65,6 @@ export function ActionBar({
         />
         <GlassIconButton
           symbolName="plus"
-          fallbackIconName="add"
           color={C.accentYellow}
           onPress={onAddSavedMeal}
           accessibilityLabel="Salvar refeicao"
@@ -69,7 +73,6 @@ export function ActionBar({
         />
         <GlassIconButton
           symbolName="keyboard.chevron.compact.down"
-          fallbackIconName="chevron-down"
           color={C.textSecondary}
           onPress={onDismissKeyboard}
           accessibilityLabel="Fechar teclado"
@@ -99,9 +102,8 @@ const styles = StyleSheet.create({
     overflow: "hidden",
     gap: spacing.xs + 1,
   },
-  capsuleFlame: {
-    fontSize: 14,
-    lineHeight: 20,
+  capsuleSymbol: {
+    marginTop: 1,
   },
   capsuleVal: {
     fontSize: 14,

@@ -1,4 +1,3 @@
-import { Ionicons } from '@expo/vector-icons';
 import {
   type RelativePathString,
   type SitemapType,
@@ -11,6 +10,7 @@ import React, { useState, useEffect, useMemo, useCallback } from 'react';
 import { ScrollView, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { ErrorBoundaryWrapper } from '../../__create/SharedErrorBoundary';
+import { AppSymbol } from '../components/icons/AppSymbol';
 
 interface ParentSitemap {
   expoPages?: Array<{
@@ -126,7 +126,7 @@ function NotFoundScreen() {
         <ScrollView style={styles.container} contentContainerStyle={styles.contentContainer}>
           <View style={styles.header}>
             <TouchableOpacity onPress={handleBack} style={styles.backButton}>
-              <Ionicons name="arrow-back" size={18} color="#666" />
+              <AppSymbol color="#666" name="chevron.left" size={18} weight="medium" />
             </TouchableOpacity>
             <View style={styles.pathContainer}>
               <View style={styles.pathPrefix}>

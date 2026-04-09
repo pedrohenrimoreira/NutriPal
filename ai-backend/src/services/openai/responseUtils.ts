@@ -4,7 +4,10 @@ import type { ChatMessage, Citation, ToolExecutionRecord, UsageSummary } from ".
 export function buildConversationInput(messages: ChatMessage[]) {
   return messages.map((message) => ({
     role: message.role,
-    content: [{ type: "input_text", text: message.text }],
+    content: [{
+      type: message.role === "assistant" ? "output_text" : "input_text",
+      text: message.text,
+    }],
   }));
 }
 

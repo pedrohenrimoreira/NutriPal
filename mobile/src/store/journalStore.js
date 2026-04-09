@@ -20,6 +20,7 @@ let _entries = {};
 let _journals = {};
 let _listeners = [];
 let _analysisVersions = {};
+let _selectedDate = toDateStr(new Date());
 
 function hasImageEntry(entry) {
   return Boolean(entry?.imageAsset?.uri || entry?.image?.uri || entry?.imageUri);
@@ -112,8 +113,7 @@ function _updateParsedResult(id, result, forceRenderFn, version) {
 
 export function useJournalStore() {
   const [, forceRender] = useState(0);
-  const today = toDateStr(new Date());
-  const [selectedDate, setSelectedDateState] = useState(today);
+  const selectedDate = _selectedDate;
 
   const subscribe = useCallback((fn) => {
     _listeners.push(fn);
@@ -126,8 +126,14 @@ export function useJournalStore() {
   const entries = getEntriesForDate(selectedDate);
 
   const setDate = useCallback((date) => {
+    if (!date || _selectedDate === date) {
+      return;
+    }
+
     getJournalForDate(date);
-    setSelectedDateState(date);
+    _selectedDate = date;
+    notify();
+    forceRender((n) => n + 1);
   }, []);
 
   const setJournalText = useCallback((rawText) => {

@@ -1,13 +1,11 @@
 import React from "react";
 import {
-  Platform,
   StyleSheet,
   TouchableOpacity,
 } from "react-native";
-import { Ionicons } from "@expo/vector-icons";
 import { GlassView, isLiquidGlassAvailable } from "expo-glass-effect";
-import { SymbolView } from "expo-symbols";
 import { useThemeStore } from "../store/themeStore";
+import { AppSymbol } from "./icons/AppSymbol";
 
 const glass = (fallback) =>
   isLiquidGlassAvailable() ? {} : { backgroundColor: fallback };
@@ -41,7 +39,6 @@ export function GlassIconButton({
   onPress,
   accessibilityLabel,
   symbolName,
-  fallbackIconName,
   color,
   size = 36,
   iconSize = 16,
@@ -92,20 +89,12 @@ export function GlassIconButton({
           glassStyle,
         ]}
       >
-        {Platform.OS === "ios" && symbolName ? (
-          <SymbolView
-            name={symbolName}
-            type="monochrome"
-            tintColor={resolvedColor}
-            style={{ width: iconSize + 2, height: iconSize + 2 }}
-          />
-        ) : (
-          <Ionicons
-            name={fallbackIconName ?? "ellipse"}
-            size={iconSize}
-            color={resolvedColor}
-          />
-        )}
+        <AppSymbol
+          color={resolvedColor}
+          name={symbolName ?? "circle"}
+          size={iconSize}
+          weight={iconSize >= 18 || active ? "medium" : "regular"}
+        />
       </GlassView>
     </TouchableOpacity>
   );

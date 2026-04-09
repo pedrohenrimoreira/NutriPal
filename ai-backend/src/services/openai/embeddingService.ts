@@ -1,6 +1,6 @@
 import { randomUUID } from "node:crypto";
 import { env } from "../../config/env.js";
-import { openai } from "../../lib/openai.js";
+import { getOpenAI } from "../../lib/openai.js";
 import type {
   EmbeddingsRequest,
   StoredEmbeddingRecord,
@@ -12,6 +12,8 @@ import {
 } from "../storage/semanticIndexStore.js";
 
 export async function handleEmbeddingsRequest(request: EmbeddingsRequest) {
+  const openai = getOpenAI();
+
   if (request.action === "embed") {
     const inputs = Array.isArray(request.input) ? request.input : [request.input];
     const response = await openai.embeddings.create({
