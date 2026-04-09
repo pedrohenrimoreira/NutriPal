@@ -1,0 +1,4 @@
+Error "ENOENT" reading contents of "D:\NutriPal\mobile\node_modules\expo\node_modules\expo-asset\android\src\main\java", skipping. Add this directory to your ignore list to exclude it.
+Error "ENOENT" reading contents of "D:\NutriPal\mobile\node_modules\expo\node_modules\expo-asset\local-maven-repo\expo\modules\asset", skipping. Add this directory to your ignore list to exclude it.
+Error "ENOENT" reading contents of "D:\NutriPal\mobile\node_modules\expo-asset\node_modules\expo-constants\android\src\main\java", skipping. Add this directory to your ignore list to exclude it.
+Error "ENOENT" reading contents of "D:\NutriPal\mobile\node_modules\expo-asset\local-maven-repo\expo\modules\asset\expo.modules.asset\12.0.9", skipping. Add this directory to your ignore list to exclude it.

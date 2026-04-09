@@ -4,8 +4,8 @@
     "version": "1.0.0",
     "orientation": "portrait",
     "icon": "./assets/images/cadu-icon.png",
+    "scheme": "nutripal",
     "userInterfaceStyle": "automatic",
-    "newArchEnabled": true,
     "ios": {
       "supportsTablet": true,
       "infoPlist": {
@@ -56,11 +56,15 @@
       ],
       [
         "expo-video",
-        { "supportsBackgroundPlayback": true, "supportsPictureInPicture": true }
+        {
+          "supportsBackgroundPlayback": true,
+          "supportsPictureInPicture": true
+        }
       ],
       "expo-font",
       "expo-secure-store",
-      "expo-web-browser"
+      "expo-web-browser",
+      "expo-asset"
     ],
     "web": {
       "bundler": "metro",

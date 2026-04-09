@@ -20,12 +20,11 @@ import { spacing, radius } from "../../theme";
  * Legacy nutrition bar preserved for quick restore.
  *
  * This was the previous single-pill format where the whole nutrition bar
- * doubled as the Goals trigger. It is intentionally inactive.
+ * doubled as the Goals trigger.
  */
 export function LegacyJournalSummaryBar({
   triggerRef,
   totals,
-  goalsExpanded,
   onToggleGoals,
 }) {
   const C = useThemeStore((s) => s.colors);
@@ -60,7 +59,7 @@ export function LegacyJournalSummaryBar({
         ref={triggerRef}
       >
         <Pressable
-          accessibilityLabel="Expand goals"
+          accessibilityLabel="Open goals"
           accessibilityRole="button"
           onPress={onToggleGoals}
           style={({ pressed }) => [
@@ -110,7 +109,6 @@ export function LegacyJournalSummaryBar({
               style={[
                 styles.chevron,
                 { color: C.textTertiary },
-                goalsExpanded && styles.chevronUp,
               ]}
             >
               {"\u2303"}
@@ -175,9 +173,6 @@ const styles = StyleSheet.create({
   chevron: {
     fontSize: 13,
     marginLeft: spacing.xs,
-    transform: [{ rotate: "180deg" }],
-  },
-  chevronUp: {
     transform: [{ rotate: "0deg" }],
   },
 });

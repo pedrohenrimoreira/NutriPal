@@ -4,12 +4,12 @@
  * UX intent:
  *   Write → interpret → update the day.
  *   No Save/Cancel. The entry lives inline on the daily page.
- *   Bottom nutrition bar tap → expands goals panel with smooth animation.
+ *   Bottom nutrition bar tap → opens the goals sheet.
  */
 import React, {
   useState, useRef, useCallback, useMemo, useEffect,
 } from "react";
-import { useRouter } from "expo-router";
+import { useRouter, useLocalSearchParams } from "expo-router";
 import {
   View, Text, TextInput, TouchableOpacity, ScrollView, FlatList, Image, Pressable,
   KeyboardAvoidingView, Platform, StyleSheet, Keyboard, LayoutAnimation,
@@ -34,7 +34,6 @@ import { useSpeechRecognition } from "../hooks/useSpeechRecognition";
 import { analyzeJournalText } from "../services/journalAnalysis";
 import { MealEntryCard } from "../components/journal/MealEntryCard";
 import { ActionBar } from "../components/journal/ActionBar";
-import { GoalsPanel } from "../components/journal/GoalsPanel";
 import { LegacyJournalSummaryBar } from "../components/journal/LegacyJournalSummaryBar";
 import { ThinkingShimmer } from "../components/journal/ThinkingShimmer";
 import { AppSymbol } from "../components/icons/AppSymbol";
@@ -45,7 +44,7 @@ import {
 import { useJournalUiStore } from "../store/journalUiStore";
 import journalHaptics from "../utils/journalHaptics";
 import { colors, spacing, radius, typography } from "../theme";
-import { AnimatePresence, MotiView } from "moti";
+import { supportsNativeBottomAccessory } from "../utils/iosNavigation";
 
 const WEB_TOP_INSET = Platform.OS === "web" ? 16 : 0;
 const WEB_BOTTOM_INSET = Platform.OS === "web" ? 34 : 0;
@@ -378,8 +377,9 @@ function SectionTitle({ title }) {
 
 /* ── main screen ─────────────────────────────────────────────────────────── */
 
-export default function Index() {
+export default function Index({ forceOpenKeyboardOnMount }) {
   const router = useRouter();
+  const params = useLocalSearchParams();
   const {
     entries,
     journal,
@@ -417,7 +417,6 @@ export default function Index() {
   const [keyboardVisible, setKeyboardVisible] = useState(false);
   const [keyboardHeight, setKeyboardHeight] = useState(0);
   const [cameraMenuVisible, setCameraMenuVisible] = useState(false);
-  const [goalsExpanded, setGoalsExpanded] = useState(false);
 
   const { width: windowWidth } = useWindowDimensions();
   const inputRef = useRef(null);
@@ -436,11 +435,12 @@ export default function Index() {
 
   const todayStr = useMemo(() => toDateStr(new Date()), []);
   const dateLabel = useMemo(() => formatDateLabel(selectedDate), [selectedDate]);
+  const usesNativeBottomAccessory = Platform.OS === "ios" && supportsNativeBottomAccessory;
   const {
     contentBottomInset,
     overlayBottomOffset,
     scrollIndicatorBottomInset,
-  } = useFloatingTabBarInsets(64);
+  } = useFloatingTabBarInsets(usesNativeBottomAccessory ? 48 : 64);
   const {
     onScroll: handleTabBarScroll,
     scrollEventThrottle: tabBarScrollEventThrottle,
@@ -449,6 +449,8 @@ export default function Index() {
   const handleJournalScroll = useCallback((event) => {
     handleTabBarScroll?.(event);
   }, [handleTabBarScroll]);
+  const shouldShowLegacyGoalsBar = !isEditing && !usesNativeBottomAccessory;
+  const shouldShowBottomOverlay = shouldShowLegacyGoalsBar || isEditing;
 
   /* keyboard visibility --------------------------------------------------- */
   useEffect(() => {
@@ -465,7 +467,6 @@ export default function Index() {
       LayoutAnimation.configureNext(LayoutAnimation.Presets.easeInEaseOut);
       setKeyboardVisible(true);
       setKeyboardHeight(e.endCoordinates?.height ?? 0);
-      setGoalsExpanded(false);
     });
 
     const wL = Platform.OS === "ios"
@@ -497,7 +498,6 @@ export default function Index() {
   /* re-center swiper whenever selectedDate changes (swipe or calendar pick) */
   useEffect(() => {
     swipeRef.current?.scrollToIndex({ index: 1, animated: false });
-    setGoalsExpanded(false);
   }, [selectedDate]);
 
   useEffect(() => {
@@ -577,6 +577,12 @@ export default function Index() {
     setIsEditing(true);
     setTimeout(() => inputRef.current?.focus(), 50);
   }, []);
+
+  useEffect(() => {
+    if (params.openKeyboard || forceOpenKeyboardOnMount) {
+       handleStartEditing();
+    }
+  }, [params.openKeyboard, forceOpenKeyboardOnMount, handleStartEditing, router]);
 
   const handleInputFocus = useCallback(() => {
     setIsEditing(true);
@@ -792,12 +798,11 @@ export default function Index() {
     router.push("/(tabs)/(journal)/save-meal");
   }, [dismissEditingContext, entries, handleStartEditing, router, savedMeals, setSavedMealDraft, text]);
 
-  const handleToggleGoals = useCallback(() => {
+  const openGoals = useCallback(() => {
     journalHaptics.selection();
     dismissEditingContext();
-    LayoutAnimation.configureNext(LayoutAnimation.Presets.easeInEaseOut);
-    setGoalsExpanded((current) => !current);
-  }, [dismissEditingContext]);
+    router.push("/(tabs)/(journal)/goals");
+  }, [dismissEditingContext, router]);
 
   const openCalendar = useCallback(() => {
     journalHaptics.light();
@@ -1073,50 +1078,38 @@ export default function Index() {
 
       </KeyboardAvoidingView>
 
-      <View
-        style={[
-          styles.bottomContainer,
-          {
-            bottom: keyboardVisible && isEditing
-              ? keyboardHeight
-              : WEB_BOTTOM_INSET + overlayBottomOffset - (Platform.OS === "ios" ? 3 : 0),
-            paddingBottom: keyboardVisible && isEditing
-              ? 0
-              : undefined,
-          },
-        ]}
-      >
-        <AnimatePresence>
-          {goalsExpanded && !isEditing && !keyboardVisible ? (
-            <MotiView
-              animate={{ opacity: 1, translateY: 0 }}
-              exit={{ opacity: 0, translateY: 16 }}
-              from={{ opacity: 0, translateY: 16 }}
-              transition={{ type: "timing", duration: 220 }}
-            >
-              <GoalsPanel totals={totals} />
-            </MotiView>
+      {shouldShowBottomOverlay ? (
+        <View
+          style={[
+            styles.bottomContainer,
+            {
+              bottom: keyboardVisible && isEditing
+                ? keyboardHeight
+                : WEB_BOTTOM_INSET + overlayBottomOffset - (Platform.OS === "ios" ? 3 : 0),
+              paddingBottom: keyboardVisible && isEditing
+                ? 0
+                : undefined,
+            },
+          ]}
+        >
+          {shouldShowLegacyGoalsBar ? (
+            <LegacyJournalSummaryBar
+              onToggleGoals={openGoals}
+              totals={totals}
+            />
           ) : null}
-        </AnimatePresence>
 
-        {!isEditing ? (
-          <LegacyJournalSummaryBar
-            goalsExpanded={goalsExpanded}
-            onToggleGoals={handleToggleGoals}
+          <ActionBar
             totals={totals}
+            isEditing={isEditing}
+            isListening={isListening}
+            onToggleMic={handleToggleMic}
+            onOpenCamera={handleOpenCamera}
+            onAddSavedMeal={handleAddSavedMeal}
+            onDismissKeyboard={handleDismissKeyboard}
           />
-        ) : null}
-
-        <ActionBar
-          totals={totals}
-          isEditing={isEditing}
-          isListening={isListening}
-          onToggleMic={handleToggleMic}
-          onOpenCamera={handleOpenCamera}
-          onAddSavedMeal={handleAddSavedMeal}
-          onDismissKeyboard={handleDismissKeyboard}
-        />
-      </View>
+        </View>
+      ) : null}
 
       {/* ── Camera context menu ────────────────────────────────────────── */}
       <Modal

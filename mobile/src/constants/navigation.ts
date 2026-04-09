@@ -1,6 +1,6 @@
 import type { SFSymbol } from "expo-symbols";
 
-export type PrimaryTabRoute = "(journal)" | "chat" | "summary";
+export type PrimaryTabRoute = "(journal)" | "chat" | "summary" | "notes";
 
 export interface PrimaryTabIconPair {
   default: SFSymbol;
@@ -17,17 +17,34 @@ export const PRIMARY_TABS: readonly PrimaryTabConfig[] = [
   {
     name: "(journal)",
     title: "Journal",
-    icon: { default: "book.closed", selected: "book.closed.fill" },
+    icon: {
+      default: "text.book.closed",
+      selected: "text.book.closed.fill",
+    },
   },
   {
     name: "chat",
-    title: "Chat",
-    icon: { default: "bubble.left", selected: "bubble.left.fill" },
+    title: "Assistant",
+    icon: {
+      default: "sparkles",
+      selected: "sparkles",
+    },
   },
   {
     name: "summary",
-    title: "Summary",
-    icon: { default: "chart.bar", selected: "chart.bar.fill" },
+    title: "Profile",
+    icon: {
+      default: "person.crop.circle",
+      selected: "person.crop.circle.fill",
+    },
+  },
+  {
+    name: "notes",
+    title: "Notes",
+    icon: {
+      default: "magnifyingglass",
+      selected: "magnifyingglass",
+    },
   },
 ] as const;
 

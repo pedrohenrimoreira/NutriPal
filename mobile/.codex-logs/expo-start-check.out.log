@@ -1,0 +1,9 @@
+env: load .env
+env: export EXPO_PUBLIC_APP_URL EXPO_PUBLIC_BASE_CREATE_USER_CONTENT_URL EXPO_PUBLIC_BASE_URL EXPO_PUBLIC_CREATE_ENV EXPO_PUBLIC_HOST EXPO_PUBLIC_PROJECT_GROUP_ID
+Starting project at D:\NutriPal\mobile
+Using src/app as the root directory for Expo Router.
+Metro is running in CI mode, reloads are disabled. Remove CI=true to enable watch mode.
+Starting Metro Bundler
+warning: Bundler cache is empty, rebuilding (this may take a minute)
+Waiting on http://localhost:58902
+Logs for your project will appear below.

@@ -1,0 +1,14 @@
+﻿git : fatal: path 
+'mobile/src/app/(tabs)/_layout.tsx' exists on 
+disk, but not in 'ebf1e72'
+No linha:1 caractere:1
++ git show 
+ebf1e72:"mobile/src/app/(tabs)/_layout.tsx" 2>&1 
+| Out-File  ...
++ ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+~~~~~~~~~~
+    + CategoryInfo          : NotSpecified: (fat 
+   al: path 'mo...ot in 'ebf1e72':String) [], R  
+  emoteException
+    + FullyQualifiedErrorId : NativeCommandError
+ 

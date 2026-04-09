@@ -5,7 +5,6 @@ import { SplashScreen } from 'expo-router/build/exports';
 import { DevSettings, LogBox, Platform, View } from 'react-native';
 import { isErrorLike, serializeError } from 'serialize-error';
 import { reportErrorToRemote } from './report-error-to-remote';
-import { errorFixEmitter, ErrorFixEvents } from '@anythingai/app/utils';
 
 type ErrorBoundaryState = {
   hasError: boolean;
@@ -25,14 +24,21 @@ const DeviceErrorBoundary = ({
     SplashScreen.hideAsync().catch(() => { });
   }, []);
   const handleFixClick = useCallback(() => {
+    if (!isAnythingApp) {
+      return;
+    }
     const seraizliedError = serializeError(error);
     const displayableError = isErrorLike(seraizliedError)
       ? `${seraizliedError.message}\n\n${seraizliedError.stack}`
       : JSON.stringify(seraizliedError, null, 2);
-    errorFixEmitter.emit(ErrorFixEvents.ERROR_FIX_SUBMITTED, {
-      error: displayableError,
+    import('@anythingai/app/utils').then(({ errorFixEmitter, ErrorFixEvents }) => {
+      errorFixEmitter.emit(ErrorFixEvents.ERROR_FIX_SUBMITTED, {
+        error: displayableError,
+      });
+    }).catch(() => {
+      // no-op
     });
-  }, [error]);
+  }, [error, isAnythingApp]);
   const handleReload = useCallback(async () => {
     if (Platform.OS === 'web') {
       window.location.reload();

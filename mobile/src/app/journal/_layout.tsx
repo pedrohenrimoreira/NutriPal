@@ -46,6 +46,15 @@ export default function JournalFlowLayout() {
         }}
       />
       <Stack.Screen
+        name="goals"
+        options={{
+          headerShown: false,
+          presentation: IOS_SHEET ? "formSheet" : "modal",
+          sheetAllowedDetents: IOS_SHEET ? [0.62, 0.82] : undefined,
+          sheetGrabberVisible: IOS_SHEET,
+        }}
+      />
+      <Stack.Screen
         name="nutrition-goals"
         options={{
           presentation: "card",
