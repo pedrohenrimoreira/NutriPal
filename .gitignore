@@ -34,3 +34,6 @@ mobile/caches/
 
 # Local planning docs
 ROADMAP.md
+
+# Local reference downloads
+UI_GLASS/*.dmg

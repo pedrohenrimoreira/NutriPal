@@ -6,11 +6,20 @@ import {
   Text,
   View,
 } from "react-native";
+import Animated, {
+  Easing,
+  useAnimatedStyle,
+  withTiming,
+} from "react-native-reanimated";
 import { AppSymbol } from "../icons/AppSymbol";
 import { useThemeStore } from "../../store/themeStore";
 import { spacing, typography } from "../../theme";
 
+const OPEN_TIMING = { duration: 280, easing: Easing.out(Easing.quad) };
+const CLOSE_TIMING = { duration: 320, easing: Easing.inOut(Easing.quad) };
+
 interface JournalTabAccessoryProps {
+  goalsOpen?: boolean;
   onPress: () => void;
   totals: {
     calories: number;
@@ -60,6 +69,7 @@ function MacroStat({
 }
 
 export function JournalTabAccessory({
+  goalsOpen = false,
   onPress,
   totals,
 }: JournalTabAccessoryProps) {
@@ -70,6 +80,19 @@ export function JournalTabAccessory({
   const carbs = Math.round(totals.carbs_g);
   const protein = Math.round(totals.protein_g);
   const fat = Math.round(totals.fat_g);
+
+  // Animate content to "leave" the accessory when goals opens
+  // and "return" to it when goals closes — like Apple Music mini player.
+  const contentAnimStyle = useAnimatedStyle(() => {
+    const timing = goalsOpen ? OPEN_TIMING : CLOSE_TIMING;
+    return {
+      opacity: withTiming(goalsOpen ? 0 : 1, timing),
+      transform: [
+        { scale: withTiming(goalsOpen ? 0.82 : 1, timing) },
+        { translateY: withTiming(goalsOpen ? -6 : 0, timing) },
+      ],
+    };
+  }, [goalsOpen]);
 
   return (
     <Pressable
@@ -88,7 +111,7 @@ export function JournalTabAccessory({
         },
       ]}
     >
-      <View style={styles.row}>
+      <Animated.View style={[styles.row, contentAnimStyle]}>
         <View style={styles.contentGroup}>
           <View style={styles.summaryGroup}>
             <AppSymbol
@@ -140,7 +163,7 @@ export function JournalTabAccessory({
             weight="semibold"
           />
         </View>
-      </View>
+      </Animated.View>
     </Pressable>
   );
 }
@@ -183,11 +206,11 @@ const styles = StyleSheet.create({
     fontWeight: "700",
     includeFontPadding: false,
     letterSpacing: -0.2,
-    lineHeight: 18,
+    lineHeight: 16,
   },
   caloriesLabelInline: {
     fontSize: 13,
-    lineHeight: 16,
+    lineHeight: 14,
   },
   macrosRow: {
     alignItems: "center",
@@ -196,18 +219,18 @@ const styles = StyleSheet.create({
     justifyContent: "center",
   },
   macroGroup: {
-    alignItems: "baseline",
+    alignItems: "center",
     flexDirection: "row",
     gap: 3,
   },
   metricText: {
     ...typography.subhead,
     includeFontPadding: false,
-    lineHeight: 18,
+    lineHeight: 16,
   },
   metricTextInline: {
     fontSize: 13,
-    lineHeight: 16,
+    lineHeight: 14,
   },
   macroKey: {
     fontWeight: "700",

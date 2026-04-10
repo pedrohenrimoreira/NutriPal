@@ -22,6 +22,7 @@ export default function PrimaryTabsLayout() {
   const { entries, journal } = useJournalStore();
   const totals = useDailyTotals(journal, entries);
   const isJournalTabFocused = segments[1] === "(journal)";
+  const isGoalsOpen = isJournalTabFocused && segments[2] === "goals";
   const nativeTabsTintColor = useMemo(() => (
     Platform.OS === "ios"
       ? DynamicColorIOS({
@@ -95,6 +96,7 @@ export default function PrimaryTabsLayout() {
         {isJournalTabFocused && supportsNativeBottomAccessory ? (
           <NativeTabs.BottomAccessory>
             <JournalTabAccessory
+              goalsOpen={isGoalsOpen}
               onPress={openGoals}
               totals={totals}
             />

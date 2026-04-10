@@ -2,19 +2,28 @@
  * Main Journal Screen
  *
  * UX intent:
- *   Write → interpret → update the day.
+ *   Write -> interpret -> update the day.
  *   No Save/Cancel. The entry lives inline on the daily page.
- *   Bottom nutrition bar tap → opens the goals sheet.
+ *   Bottom nutrition bar tap -> opens the goals sheet.
  */
 import React, {
   useState, useRef, useCallback, useMemo, useEffect,
 } from "react";
 import { useRouter, useLocalSearchParams } from "expo-router";
+import { useScrollToTop } from "@react-navigation/native";
 import {
-  View, Text, TextInput, TouchableOpacity, ScrollView, FlatList, Image, Pressable,
+  View, Text, TextInput, TouchableOpacity, ScrollView, Image, Pressable,
   KeyboardAvoidingView, Platform, StyleSheet, Keyboard, LayoutAnimation,
   useWindowDimensions, Modal, Alert,
 } from "react-native";
+import { Gesture, GestureDetector } from "react-native-gesture-handler";
+import Animated, {
+  Easing,
+  runOnJS,
+  useAnimatedStyle,
+  useSharedValue,
+  withTiming,
+} from "react-native-reanimated";
 
 import * as ImagePicker from "expo-image-picker";
 import { GlassView, isLiquidGlassAvailable } from "expo-glass-effect";
@@ -24,8 +33,6 @@ import { StatusBar } from "expo-status-bar";
 import {
   useJournalStore,
   useDailyTotals,
-  getEntriesForDate,
-  getJournalForDate,
 } from "../store/journalStore";
 import { useSettingsStore } from "../store/settingsStore";
 import { useThemeStore } from "../store/themeStore";
@@ -49,9 +56,10 @@ import { supportsNativeBottomAccessory } from "../utils/iosNavigation";
 const WEB_TOP_INSET = Platform.OS === "web" ? 16 : 0;
 const WEB_BOTTOM_INSET = Platform.OS === "web" ? 34 : 0;
 const HEADER_DOG_ICON = require("../../assets/images/header-dog.png");
+const HEADER_VISUAL_HEIGHT = 42 + spacing.md + spacing.lg;
 const INLINE_BADGE_WIDTH = 92;
 
-/* ── helpers ──────────────────────────────────────────────────────────────── */
+/* helpers */
 
 function toDateStr(d) {
   const y = d.getFullYear();
@@ -189,7 +197,7 @@ function buildAllLineInsights(rawText, journal) {
     .filter(Boolean);
 }
 
-/* ── inline annotation badge (per-line, right-aligned) ──────────────────── */
+/* inline annotation badge (per-line, right-aligned) */
 
 function AnnotationBadge({ insight, onPressSources }) {
   const C = useThemeStore((s) => s.colors);
@@ -240,7 +248,7 @@ function AnnotationBadge({ insight, onPressSources }) {
   );
 }
 
-/* ── settings sub-components ─────────────────────────────────────────────── */
+/* settings sub-components */
 
 // Settings icon slot using SF Symbols throughout the app
 function IconBadge({ color, sfName }) {
@@ -320,7 +328,7 @@ function ToggleRow({ badgeColor, sfName, label, sublabel, value, onToggle, isLas
   );
 }
 
-// Dark / Light mode segmented row — colorMode passed as prop from Index
+// Dark / Light mode segmented row - colorMode passed as prop from Index
 function AppearanceRow({ colorMode, onToggle }) {
   const C = useThemeStore((s) => s.colors);
   const isDark = colorMode === "dark";
@@ -375,7 +383,7 @@ function SectionTitle({ title }) {
   return <Text style={[sS.sectionTitle, { color: C.textSecondary }]}>{title}</Text>;
 }
 
-/* ── main screen ─────────────────────────────────────────────────────────── */
+/* main screen */
 
 export default function Index({ forceOpenKeyboardOnMount }) {
   const router = useRouter();
@@ -406,7 +414,7 @@ export default function Index({ forceOpenKeyboardOnMount }) {
     clearTranscript,
   } = useSpeechRecognition();
 
-  /* theme — reactive via Zustand (safe on web, no hook-context issues) ------ */
+  /* theme - reactive via Zustand (safe on web, no hook-context issues) ------ */
   const C = useThemeStore((s) => s.colors);
   const colorMode = useThemeStore((s) => s.colorMode);
 
@@ -421,20 +429,25 @@ export default function Index({ forceOpenKeyboardOnMount }) {
   const { width: windowWidth } = useWindowDimensions();
   const inputRef = useRef(null);
   const scrollRef = useRef(null);
-  const swipeRef = useRef(null);
   const dictationBaseTextRef = useRef("");
   const isListeningRef = useRef(isListening);
-
-  const prevDate = useMemo(() => offsetDay(selectedDate, -1), [selectedDate]);
-  const nextDate = useMemo(() => offsetDay(selectedDate, +1), [selectedDate]);
+  useScrollToTop(scrollRef);
 
   const lineInsights = useMemo(
     () => buildAllLineInsights(text, journal),
     [journal, text],
   );
+  const journalLines = useMemo(() => splitJournalLines(text), [text]);
+  const lineInsightMap = useMemo(
+    () => new Map(lineInsights.map((insight) => [insight.lineIndex, insight])),
+    [lineInsights],
+  );
+  const hasJournalContent = useMemo(() => Boolean(text.trim()), [text]);
 
   const todayStr = useMemo(() => toDateStr(new Date()), []);
   const dateLabel = useMemo(() => formatDateLabel(selectedDate), [selectedDate]);
+  const headerTopInset = insets.top + WEB_TOP_INSET + 10;
+  const headerSpacerHeight = headerTopInset + HEADER_VISUAL_HEIGHT;
   const usesNativeBottomAccessory = Platform.OS === "ios" && supportsNativeBottomAccessory;
   const {
     contentBottomInset,
@@ -445,10 +458,16 @@ export default function Index({ forceOpenKeyboardOnMount }) {
     onScroll: handleTabBarScroll,
     scrollEventThrottle: tabBarScrollEventThrottle,
   } = useFloatingTabBarScroll();
+  const swipeTranslateX = useSharedValue(0);
+  const swipeOpacity = useSharedValue(1);
 
   const handleJournalScroll = useCallback((event) => {
     handleTabBarScroll?.(event);
   }, [handleTabBarScroll]);
+  const animatedContentStyle = useAnimatedStyle(() => ({
+    opacity: swipeOpacity.value,
+    transform: [{ translateX: swipeTranslateX.value }],
+  }), []);
   const shouldShowLegacyGoalsBar = !isEditing && !usesNativeBottomAccessory;
   const shouldShowBottomOverlay = shouldShowLegacyGoalsBar || isEditing;
 
@@ -495,9 +514,8 @@ export default function Index({ forceOpenKeyboardOnMount }) {
     };
   }, []);
 
-  /* re-center swiper whenever selectedDate changes (swipe or calendar pick) */
   useEffect(() => {
-    swipeRef.current?.scrollToIndex({ index: 1, animated: false });
+    scrollRef.current?.scrollTo({ y: 0, animated: false });
   }, [selectedDate]);
 
   useEffect(() => {
@@ -546,31 +564,88 @@ export default function Index({ forceOpenKeyboardOnMount }) {
     setIsEditing(false);
   }, [cancelDebounce, stopListening]);
 
-  const handleDaySwipe = useCallback((e) => {
-    const x = e.nativeEvent.contentOffset.x;
-    if (x < windowWidth * 0.5) {
-      cancelDebounce();
-      if (isListening) {
-        stopListening();
-      }
-      Keyboard.dismiss();
-      setIsEditing(false);
-      clearTranscript();
-      dictationBaseTextRef.current = "";
-      setDate(offsetDay(selectedDate, -1));
-    } else if (x > windowWidth * 1.5) {
-      cancelDebounce();
-      if (isListening) {
-        stopListening();
-      }
-      Keyboard.dismiss();
-      setIsEditing(false);
-      clearTranscript();
-      dictationBaseTextRef.current = "";
-      setDate(offsetDay(selectedDate, +1));
+  const handleChangeDay = useCallback((direction) => {
+    cancelDebounce();
+    if (isListening) {
+      stopListening();
     }
-    // If user bounced back to center, no state change needed
-  }, [cancelDebounce, clearTranscript, isListening, selectedDate, setDate, stopListening, windowWidth]);
+
+    journalHaptics.selection();
+    Keyboard.dismiss();
+    LayoutAnimation.configureNext(LayoutAnimation.Presets.easeInEaseOut);
+    setIsEditing(false);
+    clearTranscript();
+    dictationBaseTextRef.current = "";
+    setDate(offsetDay(selectedDate, direction));
+  }, [cancelDebounce, clearTranscript, isListening, selectedDate, setDate, stopListening]);
+
+  const resetDaySwipeAnimation = useCallback(() => {
+    swipeTranslateX.value = withTiming(0, {
+      duration: 180,
+      easing: Easing.out(Easing.cubic),
+    });
+    swipeOpacity.value = withTiming(1, {
+      duration: 180,
+      easing: Easing.out(Easing.cubic),
+    });
+  }, [swipeOpacity, swipeTranslateX]);
+
+  const animateDayChange = useCallback((direction) => {
+    const exitOffset = (direction > 0 ? -1 : 1) * Math.min(44, windowWidth * 0.12);
+    const reentryOffset = exitOffset * -0.55;
+
+    swipeOpacity.value = withTiming(0.92, {
+      duration: 110,
+      easing: Easing.out(Easing.cubic),
+    });
+    swipeTranslateX.value = withTiming(exitOffset, {
+      duration: 110,
+      easing: Easing.out(Easing.cubic),
+    }, (finished) => {
+      if (!finished) {
+        return;
+      }
+
+      runOnJS(handleChangeDay)(direction);
+      swipeTranslateX.value = reentryOffset;
+      swipeOpacity.value = 0.92;
+      swipeTranslateX.value = withTiming(0, {
+        duration: 180,
+        easing: Easing.out(Easing.cubic),
+      });
+      swipeOpacity.value = withTiming(1, {
+        duration: 180,
+        easing: Easing.out(Easing.cubic),
+      });
+    });
+  }, [handleChangeDay, swipeOpacity, swipeTranslateX, windowWidth]);
+
+  const handleDaySwipeGesture = useCallback((translationX, velocityX) => {
+    const distanceThreshold = Math.min(72, windowWidth * 0.18);
+    const velocityThreshold = 900;
+    const hasDistance = Math.abs(translationX) >= distanceThreshold;
+    const hasVelocity = Math.abs(velocityX) >= velocityThreshold;
+
+    if (!hasDistance && !hasVelocity) {
+      resetDaySwipeAnimation();
+      return;
+    }
+
+    animateDayChange(translationX < 0 ? 1 : -1);
+  }, [animateDayChange, resetDaySwipeAnimation, windowWidth]);
+
+  const daySwipeGesture = useMemo(() => Gesture.Pan()
+    .activeOffsetX([-18, 18])
+    .failOffsetY([-24, 24])
+    .onUpdate((event) => {
+      const maxOffset = Math.min(42, windowWidth * 0.14);
+      const nextOffset = Math.max(-maxOffset, Math.min(maxOffset, event.translationX * 0.32));
+      swipeTranslateX.value = nextOffset;
+      swipeOpacity.value = 1 - Math.min(Math.abs(nextOffset) / 320, 0.08);
+    })
+    .onEnd((event) => {
+      runOnJS(handleDaySwipeGesture)(event.translationX, event.velocityX);
+    }), [handleDaySwipeGesture, swipeOpacity, swipeTranslateX, windowWidth]);
 
   const handleStartEditing = useCallback(() => {
     LayoutAnimation.configureNext(LayoutAnimation.Presets.easeInEaseOut);
@@ -836,12 +911,165 @@ export default function Index({ forceOpenKeyboardOnMount }) {
 
   /* render ---------------------------------------------------------------- */
   return (
-    <View style={[styles.root, { backgroundColor: C.bgPrimary }]}>
+    <View collapsable={false} style={[styles.root, { backgroundColor: C.bgPrimary }]}>
       <StatusBar style={colorMode === "dark" ? "light" : "dark"} />
 
-      {/* ── Header ──────────────────────────────────────────────────────── */}
-      <View style={[styles.header, { paddingTop: insets.top + WEB_TOP_INSET + 10 }]}>
-        {/* Left column — fixed width to match right */}
+      {/* Content */}
+      <KeyboardAvoidingView
+        collapsable={false}
+        style={styles.flex}
+        behavior={Platform.OS === "ios" ? "padding" : "height"}
+        keyboardVerticalOffset={0}
+      >
+        {/* Keep one primary vertical scroll view and handle day changes by gesture. */}
+        <GestureDetector gesture={daySwipeGesture}>
+          <ScrollView
+            collapsable={false}
+            ref={scrollRef}
+            automaticallyAdjustKeyboardInsets={Platform.OS === "ios"}
+            contentInsetAdjustmentBehavior="automatic"
+            keyboardDismissMode={Platform.OS === "ios" ? "interactive" : "on-drag"}
+            onScroll={handleJournalScroll}
+            scrollEventThrottle={tabBarScrollEventThrottle}
+            scrollIndicatorInsets={{
+              bottom: scrollIndicatorBottomInset,
+            }}
+            style={styles.flex}
+            contentContainerStyle={[
+              styles.scrollContent,
+              {
+                paddingBottom: contentBottomInset,
+                paddingTop: headerSpacerHeight,
+              },
+            ]}
+            keyboardShouldPersistTaps="always"
+            showsVerticalScrollIndicator={false}
+          >
+            <Animated.View style={animatedContentStyle}>
+              {isListening ? (
+                <View style={styles.listeningBadge}>
+                  <View style={styles.listeningDot} />
+                  <Text style={styles.listeningText}>Ouvindo...</Text>
+                </View>
+              ) : null}
+
+              {speechError ? (
+                <Text style={styles.errorText}>{speechError}</Text>
+              ) : null}
+
+              {entries.map((entry) => (
+                <MealEntryCard
+                  key={entry.id}
+                  entry={entry}
+                  onDelete={handleRemoveEntry}
+                />
+              ))}
+
+              <Pressable
+                style={[styles.noteSection, styles.noteSectionInteractive]}
+                onPress={handleStartEditing}
+                disabled={isEditing}
+              >
+              {isEditing || !hasJournalContent ? (
+                <View style={styles.inlineComposer}>
+                  <View style={styles.paragraphsContainer}>
+                    {hasJournalContent
+                      ? journalLines.map((line) => (
+                          <View key={line.lineIndex} style={pS.paragraphRow}>
+                            <View style={pS.paragraphTextTouch}>
+                              <Text
+                                style={[
+                                  pS.paragraphText,
+                                  {
+                                    color: line.sourceText.length ? C.textPrimary : "transparent",
+                                  },
+                                ]}
+                              >
+                                {line.rawText || " "}
+                              </Text>
+                            </View>
+                            <View style={pS.badgeSlot}>
+                              <AnnotationBadge
+                                insight={lineInsightMap.get(line.lineIndex)}
+                                onPressSources={openNutritionDetails}
+                              />
+                            </View>
+                          </View>
+                        ))
+                      : null}
+                  </View>
+
+                  <TextInput
+                    ref={inputRef}
+                    value={text}
+                    onChangeText={handleTextChange}
+                    onFocus={handleInputFocus}
+                    onBlur={handleInputBlur}
+                    placeholder="O que você comeu?"
+                    placeholderTextColor={C.textTertiary}
+                    style={[
+                      styles.inlineComposerInput,
+                      !hasJournalContent ? styles.inlineComposerInputWide : null,
+                      {
+                        color: hasJournalContent ? "transparent" : C.textPrimary,
+                      },
+                    ]}
+                    multiline
+                    blurOnSubmit={false}
+                    scrollEnabled={false}
+                    underlineColorAndroid="transparent"
+                    selectionColor={C.accentBlue}
+                    cursorColor={C.textPrimary}
+                    textAlignVertical="top"
+                  />
+                </View>
+              ) : hasJournalContent ? (
+                <View style={styles.paragraphsContainer}>
+                  {journalLines.map((line) => (
+                    <View key={line.lineIndex} style={pS.paragraphRow}>
+                      <TouchableOpacity
+                        onPress={handleStartEditing}
+                        activeOpacity={0.85}
+                        style={pS.paragraphTextTouch}
+                      >
+                        <Text
+                          style={[
+                            pS.paragraphText,
+                            {
+                              color: line.sourceText.length ? C.textPrimary : "transparent",
+                            },
+                          ]}
+                        >
+                          {line.rawText || " "}
+                        </Text>
+                      </TouchableOpacity>
+                      <View style={pS.badgeSlot}>
+                        <AnnotationBadge
+                          insight={lineInsightMap.get(line.lineIndex)}
+                          onPressSources={openNutritionDetails}
+                        />
+                      </View>
+                    </View>
+                  ))}
+                </View>
+              ) : (
+                <Text style={[styles.placeholder, { color: C.textSecondary }]}>
+                  O que você comeu?
+                </Text>
+              )}
+              </Pressable>
+            </Animated.View>
+          </ScrollView>
+        </GestureDetector>
+
+      </KeyboardAvoidingView>
+
+      {/* Header */}
+      <View
+        pointerEvents="box-none"
+        style={[styles.header, { paddingTop: headerTopInset }]}
+      >
+        {/* Left column - fixed width to match right */}
         <View style={styles.headerSide}>
           <Image
             source={HEADER_DOG_ICON}
@@ -851,7 +1079,7 @@ export default function Index({ forceOpenKeyboardOnMount }) {
           />
         </View>
 
-        {/* Center: Date pill — true center via flex */}
+        {/* Center: Date pill - true center via flex */}
         <View style={styles.headerCenter}>
           <TouchableOpacity onPress={openCalendar} activeOpacity={0.7}>
             <HeaderCapsule fallback="rgba(255,255,255,0.10)" style={styles.datePill}>
@@ -860,7 +1088,7 @@ export default function Index({ forceOpenKeyboardOnMount }) {
           </TouchableOpacity>
         </View>
 
-        {/* Right column — fixed width to match left */}
+        {/* Right column - fixed width to match left */}
         <View style={styles.headerSideRight}>
           <View style={styles.headerActions}>
             <TouchableOpacity onPress={openSettings} activeOpacity={0.7}>
@@ -886,207 +1114,6 @@ export default function Index({ forceOpenKeyboardOnMount }) {
           </View>
         </View>
       </View>
-
-      {/* ── Content ─────────────────────────────────────────────────────── */}
-      <KeyboardAvoidingView
-        collapsable={false}
-        style={styles.flex}
-        behavior={Platform.OS === "ios" ? "padding" : "height"}
-        keyboardVerticalOffset={0}
-      >
-        {/* ── 3-page horizontal day swiper ────────────────────────────── */}
-        <FlatList
-          collapsable={false}
-          ref={swipeRef}
-          horizontal
-          pagingEnabled
-          showsHorizontalScrollIndicator={false}
-          scrollEventThrottle={16}
-          scrollEnabled={!keyboardVisible}
-          onMomentumScrollEnd={handleDaySwipe}
-          keyboardShouldPersistTaps="always"
-          style={styles.flex}
-          data={[prevDate, selectedDate, nextDate]}
-          keyExtractor={(date) => date}
-          initialScrollIndex={1}
-          getItemLayout={(_, index) => ({ length: windowWidth, offset: windowWidth * index, index })}
-              renderItem={({ item: date, index: idx }) => {
-                const isActive = idx === 1;
-                const dayEntries = isActive ? entries : getEntriesForDate(date);
-                const dayJournal = isActive ? journal : getJournalForDate(date);
-                const dayText = isActive ? text : (dayJournal.rawText ?? "");
-                const dayLineInsights = isActive
-                  ? lineInsights
-                  : buildAllLineInsights(dayText, dayJournal);
-                const hasJournalContent = Boolean(dayText.trim());
-                return (
-              <ScrollView
-                collapsable={false}
-                ref={isActive ? scrollRef : null}
-                contentInsetAdjustmentBehavior="automatic"
-                onScroll={isActive ? handleJournalScroll : undefined}
-                scrollEventThrottle={isActive ? tabBarScrollEventThrottle : undefined}
-                scrollIndicatorInsets={{
-                  bottom: scrollIndicatorBottomInset,
-                }}
-                style={{ width: windowWidth }}
-                contentContainerStyle={[
-                  styles.scrollContent,
-                  { paddingBottom: contentBottomInset },
-                ]}
-                keyboardShouldPersistTaps="always"
-                showsVerticalScrollIndicator={false}
-              >
-                {/* Listening badge — active page only */}
-                {isActive && isListening && (
-                  <View style={styles.listeningBadge}>
-                    <View style={styles.listeningDot} />
-                    <Text style={styles.listeningText}>Ouvindo…</Text>
-                  </View>
-                )}
-
-                {/* Speech error — active page only */}
-                {isActive && speechError ? (
-                  <Text style={styles.errorText}>{speechError}</Text>
-                ) : null}
-
-                {/* ── Entries always rendered (notebook page) ──────────── */}
-                {dayEntries.map((entry) => (
-                  <MealEntryCard
-                    key={entry.id}
-                    entry={entry}
-                    onDelete={isActive ? handleRemoveEntry : undefined}
-                  />
-                ))}
-
-                    <Pressable
-                      style={[
-                        styles.noteSection,
-                        isActive ? styles.noteSectionInteractive : null,
-                      ]}
-                      onPress={isActive ? handleStartEditing : undefined}
-                      disabled={!isActive || isEditing}
-                    >
-                      {isActive && (isEditing || !hasJournalContent) ? (
-                        <View style={styles.inlineComposer}>
-                            <View style={styles.paragraphsContainer}>
-                              {hasJournalContent ? (() => {
-                                const insightMap = new Map(dayLineInsights.map((i) => [i.lineIndex, i]));
-                                return splitJournalLines(dayText).map((line) => (
-                                  <View key={line.lineIndex} style={pS.paragraphRow}>
-                                    <View style={pS.paragraphTextTouch}>
-                                      <Text
-                                        style={[
-                                          pS.paragraphText,
-                                          {
-                                            color: line.sourceText.length ? C.textPrimary : "transparent",
-                                          },
-                                        ]}
-                                      >
-                                        {line.rawText || " "}
-                                      </Text>
-                                    </View>
-                                    <View style={pS.badgeSlot}>
-                                      <AnnotationBadge
-                                        insight={insightMap.get(line.lineIndex)}
-                                        onPressSources={openNutritionDetails}
-                                      />
-                                    </View>
-                                  </View>
-                                ));
-                              })() : null}
-                            </View>
-
-                            <TextInput
-                              ref={inputRef}
-                              value={text}
-                              onChangeText={handleTextChange}
-                              onFocus={handleInputFocus}
-                              onBlur={handleInputBlur}
-                              placeholder="O que você comeu?"
-                              placeholderTextColor={C.textTertiary}
-                              style={[
-                                styles.inlineComposerInput,
-                                !hasJournalContent ? styles.inlineComposerInputWide : null,
-                                {
-                                  color: hasJournalContent ? "transparent" : C.textPrimary,
-                                },
-                              ]}
-                              multiline
-                              blurOnSubmit={false}
-                              scrollEnabled={false}
-                              underlineColorAndroid="transparent"
-                              selectionColor={C.accentBlue}
-                              cursorColor={C.textPrimary}
-                              textAlignVertical="top"
-                            />
-                          </View>
-                        ) : false ? (
-                          <TextInput
-                            ref={inputRef}
-                            value={text}
-                            onChangeText={handleTextChange}
-                            onFocus={handleInputFocus}
-                            onBlur={handleInputBlur}
-                            placeholder="O que você comeu?"
-                            placeholderTextColor={C.textTertiary}
-                            style={[styles.inlineInput, { color: C.textPrimary }]}
-                            multiline
-                            blurOnSubmit={false}
-                            scrollEnabled={false}
-                            underlineColorAndroid="transparent"
-                            selectionColor={C.accentBlue}
-                            cursorColor={C.textPrimary}
-                            textAlignVertical="top"
-                          />
-                        )
-                      : hasJournalContent ? (
-                        <View style={styles.paragraphsContainer}>
-                          {(() => {
-                            const insightMap = new Map(dayLineInsights.map((i) => [i.lineIndex, i]));
-                            return splitJournalLines(dayText).map((line) => {
-                              return (
-                                <View key={line.lineIndex} style={pS.paragraphRow}>
-                                  <TouchableOpacity
-                                    onPress={isActive ? handleStartEditing : undefined}
-                                    activeOpacity={isActive ? 0.85 : 1}
-                                    disabled={!isActive}
-                                    style={pS.paragraphTextTouch}
-                                  >
-                                    <Text
-                                      style={[
-                                        pS.paragraphText,
-                                        {
-                                          color: line.sourceText.length ? C.textPrimary : "transparent",
-                                        },
-                                      ]}
-                                    >
-                                      {line.rawText || " "}
-                                    </Text>
-                                  </TouchableOpacity>
-                                  <View style={pS.badgeSlot}>
-                                    <AnnotationBadge
-                                      insight={insightMap.get(line.lineIndex)}
-                                      onPressSources={openNutritionDetails}
-                                    />
-                                  </View>
-                                </View>
-                              );
-                            });
-                          })()}
-                        </View>
-                      ) : null}
-                    </Pressable>
-
-                {!isActive && !hasJournalContent && dayEntries.length === 0 ? (
-                  <Text style={[styles.placeholder, { color: C.textSecondary }]}>Sem registros neste dia.</Text>
-                ) : null}
-              </ScrollView>
-            );
-          }}
-        />
-
-      </KeyboardAvoidingView>
 
       {shouldShowBottomOverlay ? (
         <View
@@ -1121,7 +1148,7 @@ export default function Index({ forceOpenKeyboardOnMount }) {
         </View>
       ) : null}
 
-      {/* ── Camera context menu ────────────────────────────────────────── */}
+      {/* Camera context menu */}
       <Modal
         visible={cameraMenuVisible}
         transparent
@@ -1192,7 +1219,7 @@ export default function Index({ forceOpenKeyboardOnMount }) {
       {false ? (
         <>
 
-      {/* ── Calendar sheet ──────────────────────────────────────────────── */}
+      {/* Calendar sheet */}
       <BottomSheet
         ref={calSheetRef}
         index={-1}
@@ -1253,7 +1280,7 @@ export default function Index({ forceOpenKeyboardOnMount }) {
         </BottomSheetView>
       </BottomSheet>
 
-      {/* ── Settings sheet ──────────────────────────────────────────────── */}
+      {/* Settings sheet */}
       <BottomSheet
         ref={settingsSheetRef}
         index={-1}
@@ -1657,7 +1684,7 @@ export default function Index({ forceOpenKeyboardOnMount }) {
   );
 }
 
-/* ── styles ────────────────────────────────────────────────────────────────── */
+/* styles */
 
 const styles = StyleSheet.create({
   root: { flex: 1, backgroundColor: colors.bgPrimary },
@@ -1670,6 +1697,11 @@ const styles = StyleSheet.create({
   },
   /* Header */
   header: {
+    left: 0,
+    position: "absolute",
+    right: 0,
+    top: 0,
+    zIndex: 2,
     flexDirection: "row",
     alignItems: "center",
     paddingHorizontal: spacing.xl,
@@ -1710,7 +1742,7 @@ const styles = StyleSheet.create({
   },
   dateLabel: { ...typography.headline, fontWeight: "600" },
 
-  /* Right pill — sibling of date pill */
+  /* Right pill - sibling of date pill */
   rightPill: {
     flexDirection: "row",
     alignItems: "center",
@@ -2137,7 +2169,7 @@ const styles = StyleSheet.create({
   },
 });
 
-/* ── settings styles ───────────────────────────────────────────────────────── */
+/* settings styles */
 const sS = StyleSheet.create({
   /* Header */
   header: {
@@ -2182,7 +2214,7 @@ const sS = StyleSheet.create({
   rowVal:  { fontSize: 14, color: "#8e8e93" },
   chevron: { marginLeft: spacing.xs },
 
-  /* iOS-style icon badge — colored rounded square */
+  /* iOS-style icon badge - colored rounded square */
   iconBadge: {
     width: 24, height: 24,
     alignItems: "center",
@@ -2191,7 +2223,7 @@ const sS = StyleSheet.create({
   },
   symbol: { width: 18, height: 18 },
 
-  /* Glass wrapper for native Switch — clips glass tint to switch bounds */
+  /* Glass wrapper for native Switch - clips glass tint to switch bounds */
   toggleWrapper: {
     borderRadius: 15.5,
     overflow: "hidden",
@@ -2224,7 +2256,7 @@ const sS = StyleSheet.create({
   segLabelActive: { color: "#ffffff", fontWeight: "600" },
 });
 
-/* ── paragraph + inline annotation styles ─────────────────────────────────── */
+/* paragraph + inline annotation styles */
 const pS = StyleSheet.create({
   paragraphRow: {
     flexDirection: "row",
