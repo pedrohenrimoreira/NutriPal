@@ -4,11 +4,11 @@ import {
   ScrollView,
   StyleSheet,
   Text,
-  TouchableOpacity,
   View,
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { AppSymbol } from "../../components/icons/AppSymbol";
+import { GlassIconButton } from "../../components/GlassIconButton";
 import { useSettingsStore } from "../../store/settingsStore";
 import { useThemeStore } from "../../store/themeStore";
 import { radius, spacing, typography } from "../../theme";
@@ -58,13 +58,15 @@ export default function SavedMealsScreen() {
             >
               <View style={styles.mealHeader}>
                 <Text style={[styles.mealTitle, { color: C.textPrimary }]}>{meal.name}</Text>
-                <TouchableOpacity
-                  activeOpacity={0.75}
+                <GlassIconButton
+                  accessibilityLabel={`Excluir ${meal.name}`}
+                  color={C.accentRed}
+                  iconSize={12}
                   onPress={() => handleDeleteSavedMeal(meal)}
-                  style={[styles.deleteButton, { backgroundColor: C.bgPrimary, borderColor: C.separator }]}
-                >
-                  <AppSymbol color={C.accentRed} name="xmark" size={12} weight="medium" />
-                </TouchableOpacity>
+                  size={28}
+                  symbolName="xmark"
+                  tone="destructive"
+                />
               </View>
 
               <View style={styles.macroRow}>
@@ -125,14 +127,6 @@ const styles = StyleSheet.create({
     ...typography.headline,
     flex: 1,
     fontWeight: "700",
-  },
-  deleteButton: {
-    alignItems: "center",
-    borderRadius: radius.full,
-    borderWidth: StyleSheet.hairlineWidth,
-    height: 28,
-    justifyContent: "center",
-    width: 28,
   },
   macroRow: {
     alignItems: "center",

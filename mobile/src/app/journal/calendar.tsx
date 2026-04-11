@@ -1,9 +1,9 @@
+import { GlassView, isLiquidGlassAvailable } from "expo-glass-effect";
 import { useRouter } from "expo-router";
-import React, { useMemo } from "react";
+import React, { useCallback, useMemo, useState } from "react";
 import { StyleSheet, Text, TouchableOpacity, View } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { Calendar } from "react-native-calendars";
-import { AppSymbol } from "../../components/icons/AppSymbol";
 import { useJournalStore } from "../../store/journalStore";
 import { useThemeStore } from "../../store/themeStore";
 import { radius, spacing, typography } from "../../theme";
@@ -24,133 +24,214 @@ function formatMonthYear(dateStr: string) {
 export default function JournalCalendarScreen() {
   const router = useRouter();
   const C = useThemeStore((store) => store.colors);
+  const colorMode = useThemeStore((store) => store.colorMode);
+  const glassFallback = isLiquidGlassAvailable()
+    ? {}
+    : { backgroundColor: colorMode === "dark" ? "rgba(255,255,255,0.09)" : "rgba(0,0,0,0.04)" };
   const { selectedDate, setDate } = useJournalStore();
+
+  // All dates with at least one food entry → shown as green filled circles.
+  const allEntries = useJournalStore((s) => (s as any)._entries ?? {});
+  const loggedDates = useMemo<Set<string>>(
+    () => new Set(
+      Object.entries(allEntries as Record<string, unknown[]>)
+        .filter(([, e]) => Array.isArray(e) && e.length > 0)
+        .map(([d]) => d),
+    ),
+    [allEntries],
+  );
+
   const todayStr = useMemo(() => toDateStr(new Date()), []);
-  const monthYearLabel = useMemo(() => formatMonthYear(selectedDate), [selectedDate]);
+
+  // Tracks the month currently visible — updates as the user swipes.
+  const [visibleMonth, setVisibleMonth] = useState(selectedDate);
+  const monthYearLabel = useMemo(() => formatMonthYear(visibleMonth), [visibleMonth]);
 
   const markedDates = useMemo(() => {
-    const marks: Record<string, any> = {
-      [selectedDate]: {
-        selected: true,
-        selectedColor: C.accentGreen,
-        selectedTextColor: "#000",
-      },
-    };
+    const marks: Record<string, any> = {};
 
-    if (selectedDate !== todayStr) {
+    // Logged days → green filled circle.
+    loggedDates.forEach((date) => {
+      marks[date] = {
+        customStyles: {
+          container: { backgroundColor: C.accentGreen, borderRadius: 20 },
+          text: { color: "#000", fontWeight: "600" },
+        },
+      };
+    });
+
+    // Today: purple outline; if also logged, keep green fill + purple ring.
+    if (loggedDates.has(todayStr)) {
       marks[todayStr] = {
-        marked: true,
-        dotColor: C.accentPurple,
         customStyles: {
           container: {
+            backgroundColor: C.accentGreen,
             borderColor: C.accentPurple,
-            borderRadius: 18,
-            borderWidth: 2,
+            borderRadius: 20,
+            borderWidth: 2.5,
           },
+          text: { color: "#000", fontWeight: "700" },
+        },
+      };
+    } else {
+      marks[todayStr] = {
+        customStyles: {
+          container: { borderColor: C.accentPurple, borderRadius: 20, borderWidth: 2 },
           text: { color: C.accentPurple, fontWeight: "600" },
         },
       };
     }
 
-    return marks;
-  }, [C, selectedDate, todayStr]);
+    // Selected date (not logged, not today) → green outline shows which day
+    // the journal is currently on.
+    if (!loggedDates.has(selectedDate) && selectedDate !== todayStr) {
+      marks[selectedDate] = {
+        customStyles: {
+          container: { borderColor: C.accentGreen, borderRadius: 20, borderWidth: 2 },
+          text: { color: C.accentGreen, fontWeight: "600" },
+        },
+      };
+    }
 
-  const handleSelectDate = (date: string) => {
+    return marks;
+  }, [C, loggedDates, selectedDate, todayStr]);
+
+  const handleSelectDate = useCallback((date: string) => {
     journalHaptics.selection();
     setDate(date);
     router.back();
-  };
+  }, [router, setDate]);
 
-  const handleToday = () => {
+  const handleToday = useCallback(() => {
     journalHaptics.selection();
     setDate(todayStr);
     router.back();
-  };
+  }, [router, setDate, todayStr]);
 
+  const handleMonthChange = useCallback((month: { dateString: string }) => {
+    setVisibleMonth(month.dateString);
+  }, []);
+
+  // No flex:1 — natural height so fitToContents can measure the sheet size.
+  // The sheet background colour (bgSecondary) comes from contentStyle in the
+  // Stack.Screen options, so our views here are transparent.
   return (
-    <SafeAreaView edges={["bottom"]} style={[styles.safeArea, { backgroundColor: C.bgPrimary }]}>
+    // Outer frame carries the glass border — top + sides only, rounded top
+    // corners to follow the formSheet's native chrome shape.  No bottom border
+    // because the sheet extends flush to the screen edge at the bottom.
+    <View style={[styles.sheetFrame, { borderColor: C.separator }]}>
+      <SafeAreaView edges={["bottom"]} style={styles.safeArea}>
       <View style={styles.content}>
-        <View style={[styles.toolbar, { borderBottomColor: C.separator }]}>
-          <TouchableOpacity activeOpacity={0.72} onPress={handleToday}>
-            <Text style={[styles.toolbarAction, { color: C.accentBlue }]}>Today</Text>
+        {/* Toolbar */}
+        <View style={styles.toolbar}>
+          <TouchableOpacity activeOpacity={0.78} onPress={handleToday}>
+            <GlassView
+              colorScheme={colorMode}
+              glassEffectStyle="clear"
+              isInteractive
+              style={[styles.toolbarCapsule, glassFallback]}
+            >
+              <Text style={[styles.toolbarBtn, { color: C.accentBlue }]}>Today</Text>
+            </GlassView>
           </TouchableOpacity>
-          <View style={styles.toolbarCenter}>
-            <AppSymbol color={C.textSecondary} name="calendar" size={14} />
-            <Text style={[styles.toolbarTitle, { color: C.textPrimary }]}>{monthYearLabel}</Text>
-          </View>
-          <TouchableOpacity activeOpacity={0.72} onPress={() => router.back()}>
-            <Text style={[styles.toolbarAction, { color: C.accentBlue }]}>Done</Text>
+
+          <Text style={[styles.toolbarMonth, { color: C.textPrimary }]}>
+            {monthYearLabel}
+          </Text>
+
+          <TouchableOpacity activeOpacity={0.78} onPress={() => router.back()}>
+            <GlassView
+              colorScheme={colorMode}
+              glassEffectStyle="clear"
+              isInteractive
+              style={[styles.toolbarCapsule, glassFallback]}
+            >
+              <Text style={[styles.toolbarBtn, { color: C.accentBlue }]}>Done</Text>
+            </GlassView>
           </TouchableOpacity>
         </View>
 
-        <View style={[styles.calendarCard, { backgroundColor: C.bgSecondary, borderColor: C.separator }]}>
-          <Calendar
-            current={selectedDate}
-            markingType="custom"
-            markedDates={markedDates}
-            onDayPress={(day) => handleSelectDate(day.dateString)}
-            theme={{
-              arrowColor: C.accentBlue,
-              calendarBackground: "transparent",
-              dayTextColor: C.textPrimary,
-              monthTextColor: "transparent",
-              selectedDayBackgroundColor: C.accentGreen,
-              selectedDayTextColor: "#000",
-              textDayFontSize: 16,
-              textDayFontWeight: "400",
-              textDayHeaderFontSize: 13,
-              textDayHeaderFontWeight: "500",
-              textDisabledColor: C.textTertiary,
-              textMonthFontSize: 0,
-              textSectionTitleColor: C.systemGray2,
-              todayTextColor: C.accentPurple,
-              "stylesheet.calendar.header": {
-                header: { height: 0, overflow: "hidden" },
-              },
-            }}
-          />
-        </View>
+        {/* Calendar — transparent, sits directly on the sheet surface */}
+        <Calendar
+          current={selectedDate}
+          enableSwipeMonths
+          markingType="custom"
+          markedDates={markedDates}
+          onDayPress={(day) => handleSelectDate(day.dateString)}
+          onMonthChange={handleMonthChange}
+          style={styles.calendar}
+          theme={{
+            arrowColor: "transparent",
+            calendarBackground: "transparent",
+            dayTextColor: C.textPrimary,
+            monthTextColor: "transparent",
+            selectedDayBackgroundColor: C.accentGreen,
+            selectedDayTextColor: "#000",
+            textDayFontSize: 16,
+            textDayFontWeight: "400",
+            textDayHeaderFontSize: 12,
+            textDayHeaderFontWeight: "500",
+            textDisabledColor: C.textTertiary,
+            textMonthFontSize: 0,
+            textSectionTitleColor: C.systemGray2,
+            todayTextColor: C.accentPurple,
+            "stylesheet.calendar.header": {
+              header: { height: 0, overflow: "hidden" },
+            },
+          }}
+        />
       </View>
-    </SafeAreaView>
+      </SafeAreaView>
+    </View>
   );
 }
 
 const styles = StyleSheet.create({
+  // Glass border on the outermost wrapper — top + sides follow the formSheet
+  // corner radius; no bottom border since the sheet is flush with the screen.
+  sheetFrame: {
+    borderLeftWidth: StyleSheet.hairlineWidth,
+    borderRightWidth: StyleSheet.hairlineWidth,
+    borderTopLeftRadius: 22,
+    borderTopRightRadius: 22,
+    borderTopWidth: StyleSheet.hairlineWidth,
+  },
   safeArea: {
-    flex: 1,
+    // No flex:1 and no backgroundColor — fitToContents needs natural height,
+    // and the sheet background comes from contentStyle in _layout.tsx.
   },
   content: {
-    flex: 1,
-    paddingHorizontal: spacing.xl,
-    paddingTop: spacing.lg,
+    paddingBottom: spacing.sm,
+    paddingHorizontal: spacing.lg,
+    paddingTop: spacing.sm,
   },
   toolbar: {
     alignItems: "center",
-    borderBottomWidth: StyleSheet.hairlineWidth,
     flexDirection: "row",
     justifyContent: "space-between",
-    paddingBottom: spacing.lg,
+    paddingBottom: spacing.md,
+    paddingHorizontal: spacing.xs,
+    paddingTop: spacing.lg,
   },
-  toolbarCenter: {
-    alignItems: "center",
-    flexDirection: "row",
-    gap: spacing.xs,
-  },
-  toolbarAction: {
-    ...typography.subhead,
-    fontWeight: "600",
-  },
-  toolbarTitle: {
-    ...typography.headline,
-    fontWeight: "600",
-  },
-  calendarCard: {
-    borderRadius: radius.xl,
+  toolbarCapsule: {
+    borderCurve: "continuous",
+    borderRadius: radius.full,
     borderWidth: StyleSheet.hairlineWidth,
-    marginTop: spacing.xl,
+    borderColor: "transparent",
     overflow: "hidden",
-    paddingHorizontal: spacing.md,
-    paddingVertical: spacing.md,
+    paddingHorizontal: spacing.sm,
+    paddingVertical: 3,
+  },
+  toolbarBtn: {
+    ...typography.body,
+    fontWeight: "600",
+  },
+  toolbarMonth: {
+    ...typography.headline,
+    fontWeight: "700",
+    letterSpacing: -0.3,
+  },
+  calendar: {
+    marginHorizontal: -spacing.xs,
   },
 });
-

@@ -43,8 +43,10 @@ export interface SavedMealDraft {
 interface JournalUiState {
   clearNutritionDetail: () => void;
   clearSavedMealDraft: () => void;
+  journalComposerActive: boolean;
   nutritionDetail: JournalNutritionDetail | null;
   savedMealDraft: SavedMealDraft | null;
+  setJournalComposerActive: (active: boolean) => void;
   setNutritionDetail: (detail: JournalNutritionDetail | null) => void;
   setSavedMealDraft: (draft: SavedMealDraft | null) => void;
 }
@@ -52,9 +54,10 @@ interface JournalUiState {
 export const useJournalUiStore = create<JournalUiState>((set) => ({
   clearNutritionDetail: () => set({ nutritionDetail: null }),
   clearSavedMealDraft: () => set({ savedMealDraft: null }),
+  journalComposerActive: false,
   nutritionDetail: null,
   savedMealDraft: null,
+  setJournalComposerActive: (active) => set({ journalComposerActive: active }),
   setNutritionDetail: (detail) => set({ nutritionDetail: detail }),
   setSavedMealDraft: (draft) => set({ savedMealDraft: draft }),
 }));
-

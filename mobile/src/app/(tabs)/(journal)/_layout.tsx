@@ -48,14 +48,25 @@ export default function JournalTabStackLayout() {
         },
       }}
     >
-      <Stack.Screen name="index" options={{ headerShown: false }} />
+      <Stack.Screen
+        name="index"
+        options={{
+          headerShown: IOS_SHEET,
+          headerTransparent: IOS_SHEET,
+          headerShadowVisible: false,
+        }}
+      />
       <Stack.Screen
         name="calendar"
         options={{
+          headerShown: false,
           presentation: IOS_SHEET ? "formSheet" : "modal",
-          sheetAllowedDetents: IOS_SHEET ? [0.66] : undefined,
+          sheetAllowedDetents: IOS_SHEET ? "fitToContents" : undefined,
           sheetGrabberVisible: IOS_SHEET,
-          title: "Calendar",
+          // bgSecondary fills the entire sheet background (slightly lighter than
+          // bgPrimary) so the whole formSheet has the lighter tone, not just an
+          // inner card.
+          contentStyle: { backgroundColor: C.bgSecondary },
         }}
       />
       <Stack.Screen
@@ -82,10 +93,23 @@ export default function JournalTabStackLayout() {
         options={{
           headerShown: false,
           presentation: IOS_SHEET ? "formSheet" : "modal",
-          sheetAllowedDetents: IOS_SHEET ? "fitToContents" : undefined,
+          sheetAllowedDetents: IOS_SHEET ? [0.42, 0.9] : undefined,
+          sheetCornerRadius: IOS_SHEET ? 34 : undefined,
           sheetExpandsWhenScrolledToEdge: IOS_SHEET,
           sheetGrabberVisible: IOS_SHEET,
+          sheetInitialDetentIndex: IOS_SHEET ? 0 : undefined,
           sheetLargestUndimmedDetentIndex: IOS_SHEET ? "last" : undefined,
+        }}
+      />
+      <Stack.Screen
+        name="goals-zoom"
+        options={{
+          headerShown: false,
+          // Transparent content lets the Journal (which stays mounted in the
+          // native stack) show through the area above the card.  This is what
+          // gives the expanded Goals screen the "still in Journal" feel without
+          // transparentModal or a manual backdrop.
+          contentStyle: { backgroundColor: "transparent" },
         }}
       />
       <Stack.Screen

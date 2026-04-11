@@ -1,8 +1,5 @@
-import { GlassView, isLiquidGlassAvailable } from "expo-glass-effect";
 import React from "react";
 import {
-  Platform,
-  Pressable,
   ScrollView,
   StyleSheet,
   Text,
@@ -10,6 +7,7 @@ import {
   View,
 } from "react-native";
 import { AppSymbol } from "../icons/AppSymbol";
+import { GlassIconButton } from "../GlassIconButton";
 import { formatNutritionGoalsSummary } from "../../constants/journalSettings";
 import { useThemeStore } from "../../store/themeStore";
 import { radius, spacing, typography } from "../../theme";
@@ -142,6 +140,7 @@ function CardSurface({ children }: { children: React.ReactNode }) {
   );
 }
 
+
 export function CompactGoalsCard({
   embedded = false,
   nutritionGoals,
@@ -155,15 +154,13 @@ export function CompactGoalsCard({
     <>
       <View style={styles.header}>
         <Text style={[styles.headerTitle, { color: C.textPrimary }]}>Goals</Text>
-        <Pressable
+        <GlassIconButton
           accessibilityLabel="Close goals"
-          accessibilityRole="button"
-          hitSlop={10}
+          iconSize={14}
           onPress={onClose}
-          style={styles.closeButton}
-        >
-          <AppSymbol color={C.textSecondary} name="xmark" size={14} weight="medium" />
-        </Pressable>
+          size={32}
+          symbolName="xmark"
+        />
       </View>
 
       <View style={styles.scrollContent}>
@@ -256,12 +253,6 @@ const styles = StyleSheet.create({
   headerTitle: {
     ...typography.headline,
     fontWeight: "700",
-  },
-  closeButton: {
-    alignItems: "center",
-    justifyContent: "center",
-    minHeight: 28,
-    minWidth: 28,
   },
   scrollContent: {
     gap: spacing.md,

@@ -11,6 +11,10 @@ import { useThemeStore } from "../store/themeStore";
 
 void SplashScreen.preventAutoHideAsync();
 
+export const unstable_settings = {
+  anchor: "(tabs)",
+};
+
 export default function RootLayout() {
   const colorMode = useThemeStore((store) => store.colorMode);
 
@@ -23,6 +27,17 @@ export default function RootLayout() {
       <ThemeProvider value={colorMode === "dark" ? DarkTheme : DefaultTheme}>
         <Stack screenOptions={{ headerShown: false }} initialRouteName="(tabs)">
           <Stack.Screen name="(tabs)" />
+          <Stack.Screen
+            name="goals-zoom"
+            options={{
+              contentStyle: {
+                backgroundColor: "transparent",
+              },
+              gestureEnabled: false,
+              headerShown: false,
+              presentation: "transparentModal",
+            }}
+          />
           <Stack.Screen name="ai" />
         </Stack>
       </ThemeProvider>

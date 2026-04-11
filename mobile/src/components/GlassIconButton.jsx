@@ -16,7 +16,9 @@ function resolveFallbackBackground({ colorMode, tone }) {
       ? "rgba(127,29,29,0.26)"
       : "rgba(220,38,38,0.12)";
   }
-  return "rgba(255,255,255,0.10)";
+  return colorMode === "dark"
+    ? "rgba(255,255,255,0.16)"
+    : "rgba(0,0,0,0.07)";
 }
 
 function resolveBorderColor({ colorMode, colors, tone, active }) {
@@ -106,6 +108,7 @@ const styles = StyleSheet.create({
   },
   glass: {
     alignItems: "center",
+    borderWidth: StyleSheet.hairlineWidth,
     justifyContent: "center",
     overflow: "hidden",
     borderCurve: "continuous",

@@ -10,7 +10,7 @@ import React, {
   useState, useRef, useCallback, useMemo, useEffect,
 } from "react";
 import { useRouter, useLocalSearchParams } from "expo-router";
-import { useScrollToTop } from "@react-navigation/native";
+import { useNavigation, useScrollToTop } from "@react-navigation/native";
 import {
   View, Text, TextInput, TouchableOpacity, ScrollView, Image, Pressable,
   KeyboardAvoidingView, Platform, StyleSheet, Keyboard, LayoutAnimation,
@@ -26,7 +26,11 @@ import Animated, {
 } from "react-native-reanimated";
 
 import * as ImagePicker from "expo-image-picker";
-import { GlassView, isLiquidGlassAvailable } from "expo-glass-effect";
+import {
+  GlassContainer,
+  GlassView,
+  isLiquidGlassAvailable,
+} from "expo-glass-effect";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { StatusBar } from "expo-status-bar";
 
@@ -51,7 +55,10 @@ import {
 import { useJournalUiStore } from "../store/journalUiStore";
 import journalHaptics from "../utils/journalHaptics";
 import { colors, spacing, radius, typography } from "../theme";
-import { supportsNativeBottomAccessory } from "../utils/iosNavigation";
+import {
+  supportsNativeBottomAccessory,
+  usesJournalGoalsZoomMiniSurface,
+} from "../utils/iosNavigation";
 
 const WEB_TOP_INSET = Platform.OS === "web" ? 16 : 0;
 const WEB_BOTTOM_INSET = Platform.OS === "web" ? 34 : 0;
@@ -95,30 +102,123 @@ function HeaderCapsule({
   children,
   fallback,
   style,
+  interactive = false,
 }) {
   const C = useThemeStore((state) => state.colors);
+  const colorMode = useThemeStore((state) => state.colorMode);
 
-  if (Platform.OS === "ios") {
-    return (
-      <View
+  return (
+    <GlassView
+      colorScheme={colorMode}
+      glassEffectStyle="clear"
+      isInteractive={interactive}
+      style={[
+        style,
+        styles.headerCapsuleNative,
+        glass(fallback ?? C.glassBgHover),
+        {
+          borderColor: colorMode === "dark" ? "rgba(255,255,255,0.16)" : "rgba(255,255,255,0.58)",
+        },
+      ]}
+    >
+      {children}
+    </GlassView>
+  );
+}
+
+function HeaderActionCluster({
+  onPressGoals,
+  onPressSettings,
+  streakCount,
+}) {
+  const C = useThemeStore((state) => state.colors);
+  const colorMode = useThemeStore((state) => state.colorMode);
+  const useNativeGlass = Platform.OS === "ios" && isLiquidGlassAvailable();
+
+  const goalAction = (
+    <TouchableOpacity
+      accessibilityLabel="Abrir nutrition goals"
+      accessibilityRole="button"
+      activeOpacity={0.92}
+      hitSlop={8}
+      onPress={onPressGoals}
+      style={styles.headerActionTouch}
+    >
+      <GlassView
+        colorScheme={colorMode}
+        glassEffectStyle="clear"
+        isInteractive
         style={[
-          style,
+          styles.headerActionButton,
+          styles.headerActionButtonPrimary,
           styles.headerCapsuleNative,
+          glass(C.glassBgHover),
           {
-            backgroundColor: C.bgSecondary,
-            borderColor: C.separator,
+            borderColor: colorMode === "dark" ? "rgba(255,255,255,0.16)" : "rgba(255,255,255,0.58)",
           },
         ]}
       >
-        {children}
-      </View>
+        <AppSymbol
+          color={C.accentOrange}
+          name="flame.fill"
+          size={15}
+          style={styles.streakSymbol}
+          weight="medium"
+        />
+        <Text style={[styles.streakCount, { color: C.textPrimary }]}>{streakCount}</Text>
+      </GlassView>
+    </TouchableOpacity>
+  );
+
+  const settingsAction = (
+    <TouchableOpacity
+      accessibilityLabel="Abrir settings"
+      accessibilityRole="button"
+      activeOpacity={0.92}
+      hitSlop={8}
+      onPress={onPressSettings}
+      style={styles.headerActionTouch}
+    >
+      <GlassView
+        colorScheme={colorMode}
+        glassEffectStyle="clear"
+        isInteractive
+        style={[
+          styles.headerActionButton,
+          styles.headerActionButtonSecondary,
+          styles.headerCapsuleNative,
+          glass(C.glassBgHover),
+          {
+            borderColor: colorMode === "dark" ? "rgba(255,255,255,0.16)" : "rgba(255,255,255,0.58)",
+          },
+        ]}
+      >
+        <AppSymbol
+          color={C.textSecondary}
+          name="gearshape"
+          size={16}
+          style={styles.gearSymbol}
+          weight="regular"
+        />
+      </GlassView>
+    </TouchableOpacity>
+  );
+
+  if (useNativeGlass) {
+    return (
+      <GlassContainer spacing={6} style={styles.headerActionCluster}>
+        {goalAction}
+        {settingsAction}
+      </GlassContainer>
     );
   }
 
   return (
-    <GlassView isInteractive style={[style, glass(fallback)]}>
-      {children}
-    </GlassView>
+    <HeaderCapsule fallback="rgba(255,255,255,0.14)" style={styles.rightPill}>
+      {goalAction}
+      <View style={[styles.pillDivider, { backgroundColor: C.separatorOpaque }]} />
+      {settingsAction}
+    </HeaderCapsule>
   );
 }
 
@@ -403,6 +503,7 @@ export default function Index({ forceOpenKeyboardOnMount }) {
   const totals = useDailyTotals(journal, entries);
   const savedMeals = useSettingsStore((state) => state.savedMeals);
   const setNutritionDetail = useJournalUiStore((state) => state.setNutritionDetail);
+  const setJournalComposerActive = useJournalUiStore((state) => state.setJournalComposerActive);
   const setSavedMealDraft = useJournalUiStore((state) => state.setSavedMealDraft);
   const insets = useSafeAreaInsets();
   const {
@@ -417,6 +518,7 @@ export default function Index({ forceOpenKeyboardOnMount }) {
   /* theme - reactive via Zustand (safe on web, no hook-context issues) ------ */
   const C = useThemeStore((s) => s.colors);
   const colorMode = useThemeStore((s) => s.colorMode);
+  const navigation = useNavigation();
 
   const [isEditing, setIsEditing] = useState(false);
   const [text, setText] = useState(journal.rawText ?? "");
@@ -449,11 +551,14 @@ export default function Index({ forceOpenKeyboardOnMount }) {
   const headerTopInset = insets.top + WEB_TOP_INSET + 10;
   const headerSpacerHeight = headerTopInset + HEADER_VISUAL_HEIGHT;
   const usesNativeBottomAccessory = Platform.OS === "ios" && supportsNativeBottomAccessory;
+  const usesZoomGoalsMiniSurface = Platform.OS === "ios" && usesJournalGoalsZoomMiniSurface;
   const {
     contentBottomInset,
     overlayBottomOffset,
     scrollIndicatorBottomInset,
-  } = useFloatingTabBarInsets(usesNativeBottomAccessory ? 48 : 64);
+  } = useFloatingTabBarInsets(
+    usesZoomGoalsMiniSurface ? 84 : usesNativeBottomAccessory ? 48 : 64,
+  );
   const {
     onScroll: handleTabBarScroll,
     scrollEventThrottle: tabBarScrollEventThrottle,
@@ -468,13 +573,24 @@ export default function Index({ forceOpenKeyboardOnMount }) {
     opacity: swipeOpacity.value,
     transform: [{ translateX: swipeTranslateX.value }],
   }), []);
-  const shouldShowLegacyGoalsBar = !isEditing && !usesNativeBottomAccessory;
+  const shouldShowLegacyGoalsBar =
+    !isEditing
+    && !usesNativeBottomAccessory
+    && !usesZoomGoalsMiniSurface;
   const shouldShowBottomOverlay = shouldShowLegacyGoalsBar || isEditing;
 
   /* keyboard visibility --------------------------------------------------- */
   useEffect(() => {
     isListeningRef.current = isListening;
   }, [isListening]);
+
+  useEffect(() => {
+    setJournalComposerActive(isEditing);
+
+    return () => {
+      setJournalComposerActive(false);
+    };
+  }, [isEditing, setJournalComposerActive]);
 
   useEffect(() => {
     const willShow = Platform.OS === "ios" ? "keyboardWillShow" : "keyboardDidShow";
@@ -896,6 +1012,51 @@ export default function Index({ forceOpenKeyboardOnMount }) {
     router.push("/(tabs)/(journal)/settings");
   }, [dismissEditingContext, router]);
 
+  /* native header items (iOS only) ---------------------------------------- */
+  useEffect(() => {
+    if (Platform.OS !== "ios") return;
+    navigation.setOptions({
+      headerTitle: () => (
+        <TouchableOpacity onPress={openCalendar} activeOpacity={0.92}>
+          <HeaderCapsule fallback={C.glassBgHover} interactive style={styles.datePill}>
+            <Text style={[styles.dateLabel, { color: C.textPrimary }]}>{dateLabel}</Text>
+          </HeaderCapsule>
+        </TouchableOpacity>
+      ),
+      unstable_headerLeftItems: () => [
+        {
+          type: "custom",
+          element: (
+            <Image
+              source={HEADER_DOG_ICON}
+              style={styles.logoImage}
+              resizeMode="contain"
+              accessibilityLabel="Icone do NutriPal"
+            />
+          ),
+          hidesSharedBackground: true,
+        },
+      ],
+      unstable_headerRightItems: () => [
+        {
+          type: "button",
+          label: "Goals",
+          icon: { type: "sfSymbol", name: "flame.fill" },
+          tintColor: C.accentOrange,
+          onPress: openGoals,
+          sharesBackground: true,
+        },
+        {
+          type: "button",
+          label: "Settings",
+          icon: { type: "sfSymbol", name: "gearshape" },
+          onPress: openSettings,
+          sharesBackground: true,
+        },
+      ],
+    });
+  }, [navigation, C, dateLabel, openCalendar, openGoals, openSettings]);
+
   const openNutritionDetails = useCallback((detail) => {
     if (!detail || detail.type !== "ready") {
       return;
@@ -939,7 +1100,7 @@ export default function Index({ forceOpenKeyboardOnMount }) {
               styles.scrollContent,
               {
                 paddingBottom: contentBottomInset,
-                paddingTop: headerSpacerHeight,
+                paddingTop: Platform.OS === "ios" ? 0 : headerSpacerHeight,
               },
             ]}
             keyboardShouldPersistTaps="always"
@@ -1064,56 +1225,43 @@ export default function Index({ forceOpenKeyboardOnMount }) {
 
       </KeyboardAvoidingView>
 
-      {/* Header */}
-      <View
-        pointerEvents="box-none"
-        style={[styles.header, { paddingTop: headerTopInset }]}
-      >
-        {/* Left column - fixed width to match right */}
-        <View style={styles.headerSide}>
-          <Image
-            source={HEADER_DOG_ICON}
-            style={styles.logoImage}
-            resizeMode="contain"
-            accessibilityLabel="Icone do NutriPal"
-          />
-        </View>
+      {/* Header — only rendered on non-iOS; iOS uses the native navigation bar */}
+      {Platform.OS !== "ios" ? (
+        <View
+          pointerEvents="box-none"
+          style={[styles.header, { paddingTop: headerTopInset }]}
+        >
+          {/* Left column - fixed width to match right */}
+          <View style={styles.headerSide}>
+            <Image
+              source={HEADER_DOG_ICON}
+              style={styles.logoImage}
+              resizeMode="contain"
+              accessibilityLabel="Icone do NutriPal"
+            />
+          </View>
 
-        {/* Center: Date pill - true center via flex */}
-        <View style={styles.headerCenter}>
-          <TouchableOpacity onPress={openCalendar} activeOpacity={0.7}>
-            <HeaderCapsule fallback="rgba(255,255,255,0.10)" style={styles.datePill}>
-              <Text style={[styles.dateLabel, { color: C.textPrimary }]}>{dateLabel}</Text>
-            </HeaderCapsule>
-          </TouchableOpacity>
-        </View>
-
-        {/* Right column - fixed width to match left */}
-        <View style={styles.headerSideRight}>
-          <View style={styles.headerActions}>
-            <TouchableOpacity onPress={openSettings} activeOpacity={0.7}>
-              <HeaderCapsule fallback="rgba(255,255,255,0.10)" style={styles.rightPill}>
-                <AppSymbol
-                  color={C.accentOrange}
-                  name="flame.fill"
-                  size={15}
-                  style={styles.streakSymbol}
-                  weight="medium"
-                />
-                <Text style={[styles.streakCount, { color: C.textPrimary }]}>1</Text>
-                <View style={styles.pillDivider} />
-                <AppSymbol
-                  color={C.textSecondary}
-                  name="gearshape"
-                  size={16}
-                  style={styles.gearSymbol}
-                  weight="regular"
-                />
+          {/* Center: Date pill - true center via flex */}
+          <View style={styles.headerCenter}>
+            <TouchableOpacity onPress={openCalendar} activeOpacity={0.92}>
+              <HeaderCapsule fallback={C.glassBgHover} interactive style={styles.datePill}>
+                <Text style={[styles.dateLabel, { color: C.textPrimary }]}>{dateLabel}</Text>
               </HeaderCapsule>
             </TouchableOpacity>
           </View>
+
+          {/* Right column - fixed width to match left */}
+          <View style={styles.headerSideRight}>
+            <View style={styles.headerActions}>
+              <HeaderActionCluster
+                onPressGoals={openGoals}
+                onPressSettings={openSettings}
+                streakCount={1}
+              />
+            </View>
+          </View>
         </View>
-      </View>
+      ) : null}
 
       {shouldShowBottomOverlay ? (
         <View
@@ -1731,6 +1879,7 @@ const styles = StyleSheet.create({
   headerCapsuleNative: {
     borderWidth: StyleSheet.hairlineWidth,
     borderCurve: "continuous",
+    overflow: "hidden",
   },
 
   /* Date pill */
@@ -1746,18 +1895,39 @@ const styles = StyleSheet.create({
   rightPill: {
     flexDirection: "row",
     alignItems: "center",
-    paddingHorizontal: spacing.md + 2,
-    paddingVertical: spacing.sm + 3,
+    paddingHorizontal: 4,
+    paddingVertical: 4,
     borderRadius: radius.full,
+  },
+  headerActionCluster: {
+    alignItems: "center",
+    flexDirection: "row",
+  },
+  headerActionTouch: {
+    borderRadius: radius.full,
+  },
+  headerActionButton: {
+    alignItems: "center",
+    borderRadius: radius.full,
+    flexDirection: "row",
+    justifyContent: "center",
+    minHeight: 34,
+  },
+  headerActionButtonPrimary: {
     gap: spacing.xs,
+    paddingLeft: spacing.md + 1,
+    paddingRight: spacing.md,
+  },
+  headerActionButtonSecondary: {
+    minWidth: 34,
+    paddingHorizontal: spacing.sm + 2,
   },
   streakSymbol: { marginTop: 1 },
   streakCount: { fontSize: 14, fontWeight: "600", color: colors.textPrimary },
   pillDivider: {
     width: 1,
-    height: 14,
+    height: 18,
     backgroundColor: "rgba(255,255,255,0.15)",
-    marginHorizontal: spacing.xs,
   },
   gearSymbol: { width: 16, height: 16 },
 

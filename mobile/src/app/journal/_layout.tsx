@@ -50,10 +50,19 @@ export default function JournalFlowLayout() {
         options={{
           headerShown: false,
           presentation: IOS_SHEET ? "formSheet" : "modal",
-          sheetAllowedDetents: IOS_SHEET ? "fitToContents" : undefined,
+          sheetAllowedDetents: IOS_SHEET ? [0.42, 0.9] : undefined,
+          sheetCornerRadius: IOS_SHEET ? 34 : undefined,
           sheetExpandsWhenScrolledToEdge: IOS_SHEET,
           sheetGrabberVisible: IOS_SHEET,
+          sheetInitialDetentIndex: IOS_SHEET ? 0 : undefined,
           sheetLargestUndimmedDetentIndex: IOS_SHEET ? "last" : undefined,
+        }}
+      />
+      <Stack.Screen
+        name="goals-zoom"
+        options={{
+          headerShown: false,
+          contentStyle: { backgroundColor: "transparent" },
         }}
       />
       <Stack.Screen

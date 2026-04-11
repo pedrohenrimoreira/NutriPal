@@ -1,9 +1,7 @@
 import { useRouter } from "expo-router";
-import { GlassView, isLiquidGlassAvailable } from "expo-glass-effect";
 import React, { useMemo } from "react";
 import {
   Alert,
-  Platform,
   ScrollView,
   StyleSheet,
   Switch,
@@ -13,6 +11,7 @@ import {
 } from "react-native";
 import { SafeAreaView, useSafeAreaInsets } from "react-native-safe-area-context";
 import { AppSymbol } from "../../components/icons/AppSymbol";
+import { GlassIconButton } from "../../components/GlassIconButton";
 import {
   formatNutritionGoalsSummary,
   formatWeightKg,
@@ -196,45 +195,6 @@ function formatWeightEntrySummary(weightEntries: Array<{ date?: string }> = []) 
   return `Latest entry ${parsed.toLocaleDateString("en-US", { day: "numeric", month: "short" })}`;
 }
 
-function HeaderCloseButton({ onPress }: { onPress: () => void }) {
-  const C = useThemeStore((store) => store.colors);
-  const useGlass = Platform.OS === "ios" && isLiquidGlassAvailable();
-
-  const icon = (
-    <AppSymbol color={C.textSecondary} name="xmark" size={20} weight="regular" />
-  );
-
-  if (useGlass) {
-    return (
-      <TouchableOpacity
-        accessibilityLabel="Close settings"
-        activeOpacity={0.82}
-        onPress={onPress}
-      >
-        <GlassView isInteractive style={styles.closeButtonGlass}>
-          {icon}
-        </GlassView>
-      </TouchableOpacity>
-    );
-  }
-
-  return (
-    <TouchableOpacity
-      accessibilityLabel="Close settings"
-      activeOpacity={0.82}
-      onPress={onPress}
-      style={[
-        styles.closeButtonFallback,
-        {
-          backgroundColor: C.bgSecondary,
-          borderColor: C.separator,
-        },
-      ]}
-    >
-      {icon}
-    </TouchableOpacity>
-  );
-}
 
 export default function JournalSettingsScreen() {
   const router = useRouter();
@@ -264,11 +224,15 @@ export default function JournalSettingsScreen() {
     <SafeAreaView edges={["top", "bottom"]} style={[styles.safeArea, { backgroundColor: C.bgPrimary }]}>
       <View style={styles.header}>
         <Text style={[styles.headerTitle, { color: C.textPrimary }]}>Settings</Text>
-        <HeaderCloseButton
+        <GlassIconButton
+          accessibilityLabel="Close settings"
+          iconSize={18}
           onPress={() => {
             journalHaptics.selection();
             router.back();
           }}
+          size={40}
+          symbolName="xmark"
         />
       </View>
       <ScrollView
@@ -435,22 +399,6 @@ const styles = StyleSheet.create({
   headerTitle: {
     ...typography.title1,
     fontWeight: "700",
-  },
-  closeButtonGlass: {
-    alignItems: "center",
-    borderRadius: 24,
-    height: 48,
-    justifyContent: "center",
-    overflow: "hidden",
-    width: 48,
-  },
-  closeButtonFallback: {
-    alignItems: "center",
-    borderRadius: 24,
-    borderWidth: StyleSheet.hairlineWidth,
-    height: 48,
-    justifyContent: "center",
-    width: 48,
   },
   scroll: {
     flex: 1,

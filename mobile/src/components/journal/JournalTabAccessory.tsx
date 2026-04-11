@@ -1,24 +1,36 @@
+import { Link } from "expo-router";
 import { NativeTabs } from "expo-router/unstable-native-tabs";
-import React from "react";
+import React, { useMemo } from "react";
 import {
   Pressable,
   StyleSheet,
   Text,
   View,
+  useWindowDimensions,
 } from "react-native";
 import Animated, {
   Easing,
   useAnimatedStyle,
+  withSpring,
   withTiming,
 } from "react-native-reanimated";
+import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { AppSymbol } from "../icons/AppSymbol";
 import { useThemeStore } from "../../store/themeStore";
 import { spacing, typography } from "../../theme";
+import {
+  journalGoalsZoomRoute,
+  usesJournalGoalsAccessoryAppleZoom,
+} from "../../utils/iosNavigation";
+import { getGoalsZoomAlignmentRect } from "../../utils/goalsZoomSheet";
+import journalHaptics from "../../utils/journalHaptics";
 
-const OPEN_TIMING = { duration: 280, easing: Easing.out(Easing.quad) };
-const CLOSE_TIMING = { duration: 320, easing: Easing.inOut(Easing.quad) };
+const OPEN_TIMING = { duration: 220, easing: Easing.out(Easing.quad) };
+const CLOSE_TIMING = { duration: 180, easing: Easing.out(Easing.cubic) };
+const SURFACE_SPRING = { damping: 20, mass: 0.8, stiffness: 220 };
 
 interface JournalTabAccessoryProps {
+  interactionDisabled?: boolean;
   goalsOpen?: boolean;
   onPress: () => void;
   totals: {
@@ -43,119 +55,147 @@ function MacroStat({
   value: number;
 }) {
   return (
-    <View style={styles.macroGroup}>
-      <Text
-        style={[
-          styles.metricText,
-          isInline && styles.metricTextInline,
-          styles.macroKey,
-          { color },
-        ]}
-      >
-        {label}
-      </Text>
-      <Text
-        style={[
-          styles.metricText,
-          isInline && styles.metricTextInline,
-          styles.macroValue,
-          { color: valueColor },
-        ]}
-      >
-        {value}
-      </Text>
+    <View style={[styles.macroGroup, isInline && styles.macroGroupInline]}>
+      <View style={[styles.metricToken, isInline && styles.metricTokenInline]}>
+        <Text
+          style={[
+            styles.metricText,
+            isInline && styles.metricTextInline,
+            styles.macroKey,
+            { color },
+          ]}
+        >
+          {label}
+        </Text>
+      </View>
+      <View style={[styles.metricToken, isInline && styles.metricTokenInline]}>
+        <Text
+          style={[
+            styles.metricText,
+            isInline && styles.metricTextInline,
+            styles.macroValue,
+            { color: valueColor },
+          ]}
+        >
+          {value}
+        </Text>
+      </View>
     </View>
   );
 }
 
 export function JournalTabAccessory({
+  interactionDisabled = false,
   goalsOpen = false,
   onPress,
   totals,
 }: JournalTabAccessoryProps) {
   const placement = NativeTabs.BottomAccessory.usePlacement();
+  const insets = useSafeAreaInsets();
+  const { height: windowHeight, width: windowWidth } = useWindowDimensions();
   const C = useThemeStore((store) => store.colors);
   const isInline = placement === "inline";
   const calories = Math.round(totals.calories);
   const carbs = Math.round(totals.carbs_g);
   const protein = Math.round(totals.protein_g);
   const fat = Math.round(totals.fat_g);
+  const shouldUseAppleZoom = usesJournalGoalsAccessoryAppleZoom && !isInline;
+  const appleZoomAlignmentRect = useMemo(() => getGoalsZoomAlignmentRect({
+    topInset: insets.top,
+    windowHeight,
+    windowWidth,
+  }), [insets.top, windowHeight, windowWidth]);
 
-  // Animate content to "leave" the accessory when goals opens
-  // and "return" to it when goals closes — like Apple Music mini player.
   const contentAnimStyle = useAnimatedStyle(() => {
+    if (!shouldUseAppleZoom) {
+      return {
+        opacity: 1,
+        transform: [{ scale: 1 }, { translateY: 0 }],
+      } as const;
+    }
+
     const timing = goalsOpen ? OPEN_TIMING : CLOSE_TIMING;
     return {
       opacity: withTiming(goalsOpen ? 0 : 1, timing),
       transform: [
-        { scale: withTiming(goalsOpen ? 0.82 : 1, timing) },
-        { translateY: withTiming(goalsOpen ? -6 : 0, timing) },
+        { scale: withTiming(goalsOpen ? 0.88 : 1, timing) } as const,
+        { translateY: withTiming(goalsOpen ? -4 : 0, timing) } as const,
       ],
-    };
+    } as const;
+  }, [goalsOpen, shouldUseAppleZoom]);
+
+  const surfaceAnimStyle = useAnimatedStyle(() => {
+    if (!goalsOpen) {
+      return {
+        opacity: 1,
+        transform: [{ scale: 1 }, { translateY: 0 }],
+      } as const;
+    }
+
+    return {
+      opacity: withTiming(0.14, OPEN_TIMING),
+      transform: [
+        { scale: withSpring(0.965, SURFACE_SPRING) } as const,
+        { translateY: withSpring(8, SURFACE_SPRING) } as const,
+      ],
+    } as const;
   }, [goalsOpen]);
 
-  return (
-    <Pressable
-      accessibilityHint="Opens the goals sheet"
-      accessibilityLabel={`Open goals. ${calories} calories, ${carbs} grams of carbs, ${protein} grams of protein, ${fat} grams of fat.`}
-      accessibilityRole="button"
-      hitSlop={8}
-      onPress={onPress}
-      style={({ pressed }) => [
-        styles.surface,
-        isInline ? styles.surfaceInline : styles.surfaceRegular,
-        {
-          backgroundColor: "transparent",
-          borderTopColor: "transparent",
-          opacity: pressed ? 0.86 : 1,
-        },
+  const content = (
+    <Animated.View
+      style={[
+        styles.row,
+        isInline && styles.rowInline,
+        contentAnimStyle,
       ]}
     >
-      <Animated.View style={[styles.row, contentAnimStyle]}>
-        <View style={styles.contentGroup}>
-          <View style={styles.summaryGroup}>
+      <View style={styles.contentGroup}>
+        <View style={[styles.summaryGroup, isInline && styles.summaryGroupInline]}>
+          <View style={[styles.iconWrap, isInline && styles.iconWrapInline]}>
             <AppSymbol
               color={C.accentOrange}
               name="flame.fill"
               size={isInline ? 12 : 13}
               weight="medium"
             />
-            <Text
-              numberOfLines={1}
-              style={[
-                styles.caloriesLabel,
-                isInline && styles.caloriesLabelInline,
-                { color: C.textPrimary },
-              ]}
-            >
-              {calories.toLocaleString("en-US")} cal
-            </Text>
           </View>
+          <Text
+            numberOfLines={1}
+            style={[
+              styles.caloriesLabel,
+              isInline && styles.caloriesLabelInline,
+              { color: C.textPrimary },
+            ]}
+          >
+            {calories.toLocaleString("en-US")} cal
+          </Text>
+        </View>
 
-          <View style={styles.macrosRow}>
-            <MacroStat
-              color={C.carbs}
-              isInline={isInline}
-              label="C"
-              value={carbs}
-              valueColor={C.textPrimary}
-            />
-            <MacroStat
-              color={C.protein}
-              isInline={isInline}
-              label="P"
-              value={protein}
-              valueColor={C.textPrimary}
-            />
-            <MacroStat
-              color={C.fat}
-              isInline={isInline}
-              label="F"
-              value={fat}
-              valueColor={C.textPrimary}
-            />
-          </View>
+        <View style={[styles.macrosRow, isInline && styles.macrosRowInline]}>
+          <MacroStat
+            color={C.carbs}
+            isInline={isInline}
+            label="C"
+            value={carbs}
+            valueColor={C.textPrimary}
+          />
+          <MacroStat
+            color={C.protein}
+            isInline={isInline}
+            label="P"
+            value={protein}
+            valueColor={C.textPrimary}
+          />
+          <MacroStat
+            color={C.fat}
+            isInline={isInline}
+            label="F"
+            value={fat}
+            valueColor={C.textPrimary}
+          />
+        </View>
 
+        <View style={[styles.chevronWrap, isInline && styles.chevronWrapInline]}>
           <AppSymbol
             color={C.textTertiary}
             name="chevron.up"
@@ -163,31 +203,151 @@ export function JournalTabAccessory({
             weight="semibold"
           />
         </View>
+      </View>
+    </Animated.View>
+  );
+
+  const surfaceStyle = StyleSheet.flatten([
+    styles.surfaceBase,
+    isInline ? styles.surfaceInline : styles.surfaceRegular,
+  ]);
+
+  const zoomSurfaceStyle = StyleSheet.flatten([
+    surfaceStyle,
+    styles.surfaceZoom,
+  ]);
+  const contentShellStyle = StyleSheet.flatten([
+    styles.contentShell,
+    isInline ? styles.contentShellInline : styles.contentShellRegular,
+  ]);
+  const contentOffsetStyle = StyleSheet.flatten([
+    styles.contentOffset,
+    isInline ? styles.contentOffsetInline : styles.contentOffsetRegular,
+  ]);
+
+  const regularSurfaceContent = (
+    <View style={contentShellStyle}>
+      <View collapsable={false} style={zoomSurfaceStyle}>
+        <View style={contentOffsetStyle}>
+          {content}
+        </View>
+      </View>
+    </View>
+  );
+
+  const standardSurfaceContent = (
+    <View style={contentShellStyle}>
+      <Animated.View style={[surfaceStyle, surfaceAnimStyle]}>
+        <View style={contentOffsetStyle}>
+          {content}
+        </View>
       </Animated.View>
+    </View>
+  );
+
+  if (shouldUseAppleZoom) {
+    return (
+      <Link asChild href={journalGoalsZoomRoute}>
+        <Pressable
+          accessibilityHint="Opens the goals sheet"
+          accessibilityLabel={`Open goals. ${calories} calories, ${carbs} grams of carbs, ${protein} grams of protein, ${fat} grams of fat.`}
+          accessibilityRole="button"
+          hitSlop={8}
+          onPressIn={() => {
+            journalHaptics.light();
+          }}
+          style={({ pressed }) => [
+            styles.pressable,
+            pressed && styles.pressablePressed,
+          ]}
+        >
+          <Link.AppleZoom alignmentRect={appleZoomAlignmentRect}>
+            {regularSurfaceContent}
+          </Link.AppleZoom>
+        </Pressable>
+      </Link>
+    );
+  }
+
+  return (
+    <Pressable
+      accessibilityHint="Opens the goals sheet"
+      accessibilityLabel={`Open goals. ${calories} calories, ${carbs} grams of carbs, ${protein} grams of protein, ${fat} grams of fat.`}
+      accessibilityRole="button"
+      disabled={interactionDisabled}
+      hitSlop={8}
+      onPress={onPress}
+      style={({ pressed }) => [
+        styles.pressable,
+        isInline && styles.pressableInline,
+        pressed && styles.pressablePressed,
+      ]}
+    >
+      {standardSurfaceContent}
     </Pressable>
   );
 }
 
 const styles = StyleSheet.create({
-  surface: {
+  surfaceBase: {
+    alignSelf: "stretch",
+    alignItems: "center",
+    backgroundColor: "transparent",
+    borderTopColor: "transparent",
     justifyContent: "center",
     width: "100%",
   },
+  pressable: {
+    alignSelf: "stretch",
+    width: "100%",
+  },
+  pressableInline: {
+    height: "100%",
+    justifyContent: "center",
+  },
+  pressablePressed: {
+    opacity: 0.86,
+  },
+  surfaceZoom: {
+    overflow: "hidden",
+  },
+  contentShell: {
+    alignItems: "center",
+    justifyContent: "center",
+    width: "100%",
+  },
+  contentShellRegular: {
+    height: 48,
+  },
+  contentShellInline: {
+    height: "100%",
+  },
+  contentOffset: {
+    alignItems: "center",
+    justifyContent: "center",
+    width: "100%",
+  },
+  contentOffsetRegular: {},
+  contentOffsetInline: {},
   surfaceRegular: {
-    minHeight: 42,
+    height: 48,
     paddingHorizontal: spacing.xl,
-    paddingVertical: spacing.sm,
+    paddingVertical: 0,
   },
   surfaceInline: {
-    minHeight: 32,
+    height: "100%",
     paddingHorizontal: spacing.lg,
-    paddingVertical: spacing.xs,
+    paddingVertical: 0,
   },
   row: {
     alignItems: "center",
     flexDirection: "row",
     justifyContent: "center",
+    minHeight: 20,
     width: "100%",
+  },
+  rowInline: {
+    minHeight: 18,
   },
   contentGroup: {
     alignItems: "center",
@@ -201,16 +361,31 @@ const styles = StyleSheet.create({
     gap: spacing.xs + 1,
     justifyContent: "center",
   },
+  summaryGroupInline: {
+    gap: spacing.xs,
+  },
+  iconWrap: {
+    alignItems: "center",
+    height: 16,
+    justifyContent: "center",
+  },
+  iconWrapInline: {
+    height: 14,
+  },
   caloriesLabel: {
     ...typography.subhead,
+    alignSelf: "center",
     fontWeight: "700",
     includeFontPadding: false,
     letterSpacing: -0.2,
-    lineHeight: 16,
+    lineHeight: 15,
+    minHeight: 16,
+    textAlignVertical: "center",
   },
   caloriesLabelInline: {
     fontSize: 13,
-    lineHeight: 14,
+    lineHeight: 13,
+    minHeight: 14,
   },
   macrosRow: {
     alignItems: "center",
@@ -218,19 +393,37 @@ const styles = StyleSheet.create({
     gap: spacing.sm + 2,
     justifyContent: "center",
   },
+  macrosRowInline: {
+    gap: spacing.sm,
+  },
   macroGroup: {
     alignItems: "center",
     flexDirection: "row",
     gap: 3,
   },
+  macroGroupInline: {
+    gap: 2,
+  },
+  metricToken: {
+    alignItems: "center",
+    height: 16,
+    justifyContent: "center",
+  },
+  metricTokenInline: {
+    height: 14,
+  },
   metricText: {
     ...typography.subhead,
+    alignSelf: "center",
     includeFontPadding: false,
-    lineHeight: 16,
+    lineHeight: 15,
+    minHeight: 16,
+    textAlignVertical: "center",
   },
   metricTextInline: {
     fontSize: 13,
-    lineHeight: 14,
+    lineHeight: 13,
+    minHeight: 14,
   },
   macroKey: {
     fontWeight: "700",
@@ -239,6 +432,14 @@ const styles = StyleSheet.create({
   macroValue: {
     fontWeight: "700",
     letterSpacing: -0.2,
+  },
+  chevronWrap: {
+    alignItems: "center",
+    height: 16,
+    justifyContent: "center",
+  },
+  chevronWrapInline: {
+    height: 14,
   },
 });
 
