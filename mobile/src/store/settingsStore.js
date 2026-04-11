@@ -34,6 +34,7 @@ export const useSettingsStore = create(
       autoTimeZone: true,
       calorieEstimateBias: "accurate",
       dictationLanguage: "auto",
+      journalBottomAccessoryMode: "regular",
       healthProfile: {
         activityLevel: "moderate",
         currentWeightKg: 61.5,
@@ -51,6 +52,11 @@ export const useSettingsStore = create(
       setAutoTimeZone: (autoTimeZone) => set({ autoTimeZone }),
       setCalorieEstimateBias: (calorieEstimateBias) => set({ calorieEstimateBias }),
       setDictationLanguage: (dictationLanguage) => set({ dictationLanguage }),
+      setJournalBottomAccessoryMode: (journalBottomAccessoryMode) =>
+        set({
+          journalBottomAccessoryMode:
+            journalBottomAccessoryMode === "compact" ? "compact" : "regular",
+        }),
       setHealthProfile: (updates) =>
         set((state) => ({
           healthProfile: {
@@ -137,6 +143,7 @@ export const useSettingsStore = create(
         autoTimeZone: state.autoTimeZone,
         calorieEstimateBias: state.calorieEstimateBias,
         dictationLanguage: state.dictationLanguage,
+        journalBottomAccessoryMode: state.journalBottomAccessoryMode,
         healthProfile: state.healthProfile,
         nutritionGoals: state.nutritionGoals,
         reminders: state.reminders,

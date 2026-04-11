@@ -30,6 +30,7 @@ const CLOSE_TIMING = { duration: 180, easing: Easing.out(Easing.cubic) };
 const SURFACE_SPRING = { damping: 20, mass: 0.8, stiffness: 220 };
 
 interface JournalTabAccessoryProps {
+  displayMode?: "compact" | "regular";
   interactionDisabled?: boolean;
   goalsOpen?: boolean;
   onPress: () => void;
@@ -39,6 +40,10 @@ interface JournalTabAccessoryProps {
     fat_g: number;
     protein_g: number;
   };
+}
+
+interface JournalTabAccessorySurfaceProps extends JournalTabAccessoryProps {
+  placement: "inline" | "regular";
 }
 
 function MacroStat({
@@ -84,22 +89,26 @@ function MacroStat({
   );
 }
 
-export function JournalTabAccessory({
+export function JournalTabAccessorySurface({
+  displayMode = "regular",
   interactionDisabled = false,
   goalsOpen = false,
   onPress,
+  placement,
   totals,
-}: JournalTabAccessoryProps) {
-  const placement = NativeTabs.BottomAccessory.usePlacement();
+}: JournalTabAccessorySurfaceProps) {
   const insets = useSafeAreaInsets();
   const { height: windowHeight, width: windowWidth } = useWindowDimensions();
   const C = useThemeStore((store) => store.colors);
   const isInline = placement === "inline";
+  const isCompactMode = displayMode === "compact";
+  const useInlineMetrics = isInline || isCompactMode;
   const calories = Math.round(totals.calories);
   const carbs = Math.round(totals.carbs_g);
   const protein = Math.round(totals.protein_g);
   const fat = Math.round(totals.fat_g);
   const shouldUseAppleZoom = usesJournalGoalsAccessoryAppleZoom && !isInline;
+  const compactRegularWidth = Math.min(Math.max(windowWidth * 0.6, 224), 292);
   const appleZoomAlignmentRect = useMemo(() => getGoalsZoomAlignmentRect({
     topInset: insets.top,
     windowHeight,
@@ -145,17 +154,18 @@ export function JournalTabAccessory({
     <Animated.View
       style={[
         styles.row,
-        isInline && styles.rowInline,
+        useInlineMetrics && styles.rowInline,
+        isCompactMode && styles.rowCompact,
         contentAnimStyle,
       ]}
     >
       <View style={styles.contentGroup}>
-        <View style={[styles.summaryGroup, isInline && styles.summaryGroupInline]}>
-          <View style={[styles.iconWrap, isInline && styles.iconWrapInline]}>
+        <View style={[styles.summaryGroup, useInlineMetrics && styles.summaryGroupInline]}>
+          <View style={[styles.iconWrap, useInlineMetrics && styles.iconWrapInline]}>
             <AppSymbol
               color={C.accentOrange}
               name="flame.fill"
-              size={isInline ? 12 : 13}
+              size={useInlineMetrics ? 12 : 13}
               weight="medium"
             />
           </View>
@@ -163,7 +173,7 @@ export function JournalTabAccessory({
             numberOfLines={1}
             style={[
               styles.caloriesLabel,
-              isInline && styles.caloriesLabelInline,
+              useInlineMetrics && styles.caloriesLabelInline,
               { color: C.textPrimary },
             ]}
           >
@@ -171,35 +181,35 @@ export function JournalTabAccessory({
           </Text>
         </View>
 
-        <View style={[styles.macrosRow, isInline && styles.macrosRowInline]}>
+        <View style={[styles.macrosRow, useInlineMetrics && styles.macrosRowInline]}>
           <MacroStat
             color={C.carbs}
-            isInline={isInline}
+            isInline={useInlineMetrics}
             label="C"
             value={carbs}
             valueColor={C.textPrimary}
           />
           <MacroStat
             color={C.protein}
-            isInline={isInline}
+            isInline={useInlineMetrics}
             label="P"
             value={protein}
             valueColor={C.textPrimary}
           />
           <MacroStat
             color={C.fat}
-            isInline={isInline}
+            isInline={useInlineMetrics}
             label="F"
             value={fat}
             valueColor={C.textPrimary}
           />
         </View>
 
-        <View style={[styles.chevronWrap, isInline && styles.chevronWrapInline]}>
+        <View style={[styles.chevronWrap, useInlineMetrics && styles.chevronWrapInline]}>
           <AppSymbol
             color={C.textTertiary}
             name="chevron.up"
-            size={isInline ? 11 : 12}
+            size={useInlineMetrics ? 11 : 12}
             weight="semibold"
           />
         </View>
@@ -209,7 +219,9 @@ export function JournalTabAccessory({
 
   const surfaceStyle = StyleSheet.flatten([
     styles.surfaceBase,
-    isInline ? styles.surfaceInline : styles.surfaceRegular,
+    useInlineMetrics ? styles.surfaceInline : styles.surfaceRegular,
+    isCompactMode && styles.surfaceCompact,
+    isCompactMode && !isInline ? { width: compactRegularWidth } : null,
   ]);
 
   const zoomSurfaceStyle = StyleSheet.flatten([
@@ -218,11 +230,13 @@ export function JournalTabAccessory({
   ]);
   const contentShellStyle = StyleSheet.flatten([
     styles.contentShell,
-    isInline ? styles.contentShellInline : styles.contentShellRegular,
+    useInlineMetrics ? styles.contentShellInline : styles.contentShellRegular,
+    isCompactMode && styles.contentShellCompact,
+    isCompactMode && !isInline ? { width: compactRegularWidth } : null,
   ]);
   const contentOffsetStyle = StyleSheet.flatten([
     styles.contentOffset,
-    isInline ? styles.contentOffsetInline : styles.contentOffsetRegular,
+    useInlineMetrics ? styles.contentOffsetInline : styles.contentOffsetRegular,
   ]);
 
   const regularSurfaceContent = (
@@ -279,12 +293,24 @@ export function JournalTabAccessory({
       onPress={onPress}
       style={({ pressed }) => [
         styles.pressable,
+        isCompactMode && !isInline && styles.pressableCompact,
         isInline && styles.pressableInline,
         pressed && styles.pressablePressed,
       ]}
     >
       {standardSurfaceContent}
     </Pressable>
+  );
+}
+
+export function JournalTabAccessory(props: JournalTabAccessoryProps) {
+  const placement = NativeTabs.BottomAccessory.usePlacement();
+
+  return (
+    <JournalTabAccessorySurface
+      {...props}
+      placement={placement}
+    />
   );
 }
 
@@ -305,6 +331,10 @@ const styles = StyleSheet.create({
     height: "100%",
     justifyContent: "center",
   },
+  pressableCompact: {
+    alignSelf: "center",
+    width: "auto",
+  },
   pressablePressed: {
     opacity: 0.86,
   },
@@ -321,6 +351,9 @@ const styles = StyleSheet.create({
   },
   contentShellInline: {
     height: "100%",
+  },
+  contentShellCompact: {
+    height: 40,
   },
   contentOffset: {
     alignItems: "center",
@@ -339,6 +372,10 @@ const styles = StyleSheet.create({
     paddingHorizontal: spacing.lg,
     paddingVertical: 0,
   },
+  surfaceCompact: {
+    height: 40,
+    paddingHorizontal: spacing.lg,
+  },
   row: {
     alignItems: "center",
     flexDirection: "row",
@@ -347,6 +384,9 @@ const styles = StyleSheet.create({
     width: "100%",
   },
   rowInline: {
+    minHeight: 18,
+  },
+  rowCompact: {
     minHeight: 18,
   },
   contentGroup: {

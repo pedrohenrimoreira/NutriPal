@@ -3,6 +3,7 @@ import { NativeTabs } from "expo-router/unstable-native-tabs";
 import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { DynamicColorIOS, Platform, StyleSheet, View } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
+import { JournalCompactChrome } from "../../components/journal/JournalCompactChrome";
 import { JournalTabAccessory } from "../../components/journal/JournalTabAccessory";
 import { JournalGoalsZoomMiniSurface } from "../../components/journal/JournalGoalsZoomMiniSurface";
 import { AppSymbol } from "../../components/icons/AppSymbol";
@@ -10,6 +11,7 @@ import { FloatingTabBar } from "../../components/navigation/FloatingTabBar";
 import { PRIMARY_TABS, type PrimaryTabRoute } from "../../constants/navigation";
 import { useJournalUiStore } from "../../store/journalUiStore";
 import { useDailyTotals, useJournalStore } from "../../store/journalStore";
+import { useSettingsStore } from "../../store/settingsStore";
 import { useThemeStore } from "../../store/themeStore";
 import journalHaptics from "../../utils/journalHaptics";
 import {
@@ -28,10 +30,19 @@ export default function PrimaryTabsLayout() {
   const segments = useSegments() as string[];
   const insets = useSafeAreaInsets();
   const C = useThemeStore((store) => store.colors);
+  const journalBottomAccessoryMode = useSettingsStore((store) => store.journalBottomAccessoryMode);
   const journalComposerActive = useJournalUiStore((store) => store.journalComposerActive);
   const { entries, journal } = useJournalStore();
   const totals = useDailyTotals(journal, entries);
   const isTabbedJournalRoute = segments[0] === "(tabs)" && segments[1] === "(journal)";
+  const isTabbedPrimaryRootRoute =
+    segments[0] === "(tabs)"
+    && (
+      (segments[1] === "(journal)" && !segments[2])
+      || segments[1] === "chat"
+      || segments[1] === "summary"
+      || segments[1] === "notes"
+    );
   const isRootGoalsOverlayRoute = segments[0] === "goals-zoom";
   const isGoalsZoomJournalRoute = isTabbedJournalRoute && segments[2] === "goals-zoom";
   const isJournalContextActive = isTabbedJournalRoute || isRootGoalsOverlayRoute;
@@ -46,8 +57,18 @@ export default function PrimaryTabsLayout() {
     && usesJournalGoalsZoomMiniSurface
     && !journalComposerActive
     && (isJournalRootScreen || isGoalsZoomJournalRoute);
+  const usesCompactJournalChrome =
+    Platform.OS === "ios"
+    && supportsNativeBottomAccessory
+    && journalBottomAccessoryMode === "compact";
+  const showCompactJournalChrome =
+    usesCompactJournalChrome
+    && isTabbedPrimaryRootRoute
+    && !journalComposerActive
+    && !isGoalsOpen;
   const zoomMiniSurfaceBottom = insets.bottom + 58;
   const goalsAccessoryActive = isGoalsAccessoryPrimed;
+  const nativeTabsHidden = hideNativeTabsBar || usesCompactJournalChrome;
   const nativeTabsTintColor = useMemo(() => (
     Platform.OS === "ios"
       ? DynamicColorIOS({
@@ -158,7 +179,7 @@ export default function PrimaryTabsLayout() {
       <View style={styles.iosRoot}>
         <NativeTabs
           blurEffect="systemDefault"
-          hidden={hideNativeTabsBar}
+          hidden={nativeTabsHidden}
           labelStyle={{
             color: nativeTabsTintColor,
             fontSize: 10,
@@ -167,7 +188,7 @@ export default function PrimaryTabsLayout() {
           minimizeBehavior={supportsNativeBottomAccessory ? "onScrollDown" : undefined}
           tintColor={nativeTabsTintColor}
         >
-          {isJournalContextActive && supportsNativeBottomAccessory ? (
+          {supportsNativeBottomAccessory && !usesCompactJournalChrome ? (
             <NativeTabs.BottomAccessory>
               <JournalTabAccessory
                 interactionDisabled={isGoalsOpen || isGoalsAccessoryPrimed}
@@ -230,6 +251,16 @@ export default function PrimaryTabsLayout() {
               />
             </View>
           </View>
+        ) : null}
+
+        {showCompactJournalChrome ? (
+          <JournalCompactChrome
+            goalsOpen={goalsAccessoryActive}
+            interactionDisabled={isGoalsOpen || isGoalsAccessoryPrimed}
+            onOpenComposer={openJournalComposer}
+            onOpenGoals={openGoals}
+            totals={totals}
+          />
         ) : null}
       </View>
     );

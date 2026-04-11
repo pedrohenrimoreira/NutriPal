@@ -22,6 +22,7 @@ import Animated, {
   runOnJS,
   useAnimatedStyle,
   useSharedValue,
+  withSpring,
   withTiming,
 } from "react-native-reanimated";
 
@@ -527,6 +528,7 @@ export default function Index({ forceOpenKeyboardOnMount }) {
   const [keyboardVisible, setKeyboardVisible] = useState(false);
   const [keyboardHeight, setKeyboardHeight] = useState(0);
   const [cameraMenuVisible, setCameraMenuVisible] = useState(false);
+  const [cameraMenuMounted, setCameraMenuMounted] = useState(false);
 
   const { width: windowWidth } = useWindowDimensions();
   const inputRef = useRef(null);
@@ -565,6 +567,9 @@ export default function Index({ forceOpenKeyboardOnMount }) {
   } = useFloatingTabBarScroll();
   const swipeTranslateX = useSharedValue(0);
   const swipeOpacity = useSharedValue(1);
+  const cameraMenuOpacity = useSharedValue(0);
+  const cameraMenuScale = useSharedValue(0.92);
+  const cameraMenuTranslateY = useSharedValue(10);
 
   const handleJournalScroll = useCallback((event) => {
     handleTabBarScroll?.(event);
@@ -572,6 +577,13 @@ export default function Index({ forceOpenKeyboardOnMount }) {
   const animatedContentStyle = useAnimatedStyle(() => ({
     opacity: swipeOpacity.value,
     transform: [{ translateX: swipeTranslateX.value }],
+  }), []);
+  const cameraMenuAnimatedStyle = useAnimatedStyle(() => ({
+    opacity: cameraMenuOpacity.value,
+    transform: [
+      { translateY: cameraMenuTranslateY.value },
+      { scale: cameraMenuScale.value },
+    ],
   }), []);
   const shouldShowLegacyGoalsBar =
     !isEditing
@@ -920,25 +932,11 @@ export default function Index({ forceOpenKeyboardOnMount }) {
     }
   }, [addImageEntry]);
 
-  const closeCameraMenu = useCallback(() => setCameraMenuVisible(false), []);
-
-  const handleCameraMenuAction = useCallback((action) => {
-    journalHaptics.selection();
-    setCameraMenuVisible(false);
-    // Small delay so modal dismisses before launching picker
-    setTimeout(() => {
-      if (action === "scan") {
-        Alert.alert("Scan Menu", "Menu scanning coming soon!");
-      } else {
-        void handlePickImage(action);
-      }
-    }, 200);
-  }, [handlePickImage]);
-
   const handleOpenCamera = useCallback(() => {
     journalHaptics.light();
-    dismissEditingContext();
+
     if (Platform.OS === "ios") {
+      setCameraMenuMounted(true);
       setCameraMenuVisible(true);
       return;
     }
@@ -949,15 +947,64 @@ export default function Index({ forceOpenKeyboardOnMount }) {
         "Escolha de onde enviar a foto.",
         [
           { text: "Cancelar", style: "cancel" },
-          { text: "Biblioteca", onPress: () => void handlePickImage("library") },
-          { text: "Camera", onPress: () => void handlePickImage("camera") },
+          { text: "Choose from Library", onPress: () => void handlePickImage("library") },
+          { text: "Take Photo", onPress: () => void handlePickImage("camera") },
         ],
       );
       return;
     }
 
     void handlePickImage("library");
-  }, [dismissEditingContext, handlePickImage]);
+  }, [handlePickImage]);
+
+  const closeCameraMenu = useCallback(() => {
+    setCameraMenuVisible(false);
+  }, []);
+
+  const handleCameraMenuAction = useCallback((source) => {
+    if (source !== "library" && source !== "camera") {
+      return;
+    }
+
+    journalHaptics.selection();
+    setCameraMenuVisible(false);
+    setTimeout(() => {
+      void handlePickImage(source);
+    }, 190);
+  }, [handlePickImage]);
+
+  useEffect(() => {
+    if (cameraMenuVisible) {
+      cameraMenuOpacity.value = 0;
+      cameraMenuScale.value = 0.92;
+      cameraMenuTranslateY.value = 10;
+      cameraMenuOpacity.value = withTiming(1, { duration: 170, easing: Easing.out(Easing.cubic) });
+      cameraMenuScale.value = withSpring(1, {
+        damping: 18,
+        mass: 0.8,
+        stiffness: 240,
+      });
+      cameraMenuTranslateY.value = withSpring(0, {
+        damping: 20,
+        mass: 0.85,
+        stiffness: 260,
+      });
+      return;
+    }
+
+    cameraMenuOpacity.value = withTiming(0, { duration: 130, easing: Easing.in(Easing.quad) });
+    cameraMenuScale.value = withTiming(0.96, { duration: 130, easing: Easing.in(Easing.quad) });
+    cameraMenuTranslateY.value = withTiming(6, { duration: 130, easing: Easing.in(Easing.quad) }, (finished) => {
+      if (finished) {
+        runOnJS(setCameraMenuMounted)(false);
+      }
+    });
+  }, [
+    cameraMenuOpacity,
+    cameraMenuScale,
+    cameraMenuTranslateY,
+    cameraMenuVisible,
+  ]);
 
   const handleAddSavedMeal = useCallback(() => {
     journalHaptics.light();
@@ -1296,74 +1343,65 @@ export default function Index({ forceOpenKeyboardOnMount }) {
         </View>
       ) : null}
 
-      {/* Camera context menu */}
-      <Modal
-        visible={cameraMenuVisible}
-        transparent
-        animationType="fade"
-        onRequestClose={closeCameraMenu}
-      >
-        <View style={styles.cameraMenuOverlay}>
-          <TouchableOpacity
-            style={StyleSheet.absoluteFill}
-            activeOpacity={1}
-            onPress={closeCameraMenu}
-          />
-          <View style={styles.cameraMenuAnchor}>
-            <GlassView style={[styles.cameraMenu, glass("rgba(40,40,40,0.92)")]}>
-
-              <TouchableOpacity
-                style={styles.cameraMenuItem}
-                activeOpacity={0.6}
-                onPress={() => handleCameraMenuAction("scan")}
+      {cameraMenuMounted ? (
+        <View pointerEvents="box-none" style={styles.cameraMenuOverlay}>
+          <Pressable onPress={closeCameraMenu} style={StyleSheet.absoluteFill} />
+          <View
+            pointerEvents="box-none"
+            style={[
+              styles.cameraMenuAnchor,
+              {
+                bottom: keyboardVisible && isEditing
+                  ? keyboardHeight + 58
+                  : WEB_BOTTOM_INSET + overlayBottomOffset + 62,
+              },
+            ]}
+          >
+            <Animated.View style={cameraMenuAnimatedStyle}>
+              <GlassView
+                isInteractive={false}
+                style={[styles.cameraMenuCard, glass("rgba(255,255,255,0.16)")]}
               >
-                <AppSymbol
-                  color={C.accentBlue}
-                  name="doc.text.viewfinder"
-                  size={20}
-                  style={styles.cameraMenuSymbol}
-                  weight="medium"
-                />
-                <Text style={[styles.cameraMenuLabel, { color: C.textPrimary }]}>Scan Menu</Text>
-              </TouchableOpacity>
+                <TouchableOpacity
+                  activeOpacity={0.72}
+                  onPress={() => handleCameraMenuAction("library")}
+                  style={styles.cameraMenuItem}
+                >
+                  <AppSymbol
+                    color={C.textPrimary}
+                    name="photo.on.rectangle"
+                    size={19}
+                    style={styles.cameraMenuSymbol}
+                    weight="medium"
+                  />
+                  <Text style={[styles.cameraMenuLabel, { color: C.textPrimary }]}>
+                    Choose from Library
+                  </Text>
+                </TouchableOpacity>
 
-              <View style={styles.cameraMenuSep} />
+                <View style={[styles.cameraMenuSeparator, { backgroundColor: C.separator }]} />
 
-              <TouchableOpacity
-                style={styles.cameraMenuItem}
-                activeOpacity={0.6}
-                onPress={() => handleCameraMenuAction("library")}
-              >
-                <AppSymbol
-                  color={C.accentGreen}
-                  name="photo.on.rectangle"
-                  size={20}
-                  style={styles.cameraMenuSymbol}
-                  weight="medium"
-                />
-                <Text style={[styles.cameraMenuLabel, { color: C.textPrimary }]}>Choose from Library</Text>
-              </TouchableOpacity>
-
-              <View style={styles.cameraMenuSep} />
-
-              <TouchableOpacity
-                style={styles.cameraMenuItem}
-                activeOpacity={0.6}
-                onPress={() => handleCameraMenuAction("camera")}
-              >
-                <AppSymbol
-                  color={C.accentPink}
-                  name="camera"
-                  size={20}
-                  style={styles.cameraMenuSymbol}
-                  weight="medium"
-                />
-                <Text style={[styles.cameraMenuLabel, { color: C.textPrimary }]}>Take Photo</Text>
-              </TouchableOpacity>
-            </GlassView>
+                <TouchableOpacity
+                  activeOpacity={0.72}
+                  onPress={() => handleCameraMenuAction("camera")}
+                  style={styles.cameraMenuItem}
+                >
+                  <AppSymbol
+                    color={C.textPrimary}
+                    name="camera"
+                    size={19}
+                    style={styles.cameraMenuSymbol}
+                    weight="medium"
+                  />
+                  <Text style={[styles.cameraMenuLabel, { color: C.textPrimary }]}>
+                    Take Photo
+                  </Text>
+                </TouchableOpacity>
+              </GlassView>
+            </Animated.View>
           </View>
         </View>
-      </Modal>
+      ) : null}
       {false ? (
         <>
 
@@ -2294,48 +2332,46 @@ const styles = StyleSheet.create({
     color: "#000",
     fontWeight: "700",
   },
-
-  /* Camera context menu */
   cameraMenuOverlay: {
-    flex: 1,
+    ...StyleSheet.absoluteFillObject,
+    zIndex: 12,
   },
   cameraMenuAnchor: {
     position: "absolute",
-    bottom: spacing.xl + 60,
     right: spacing.xl,
+    alignItems: "flex-end",
   },
-  cameraMenu: {
-    borderRadius: radius.xl,
-    overflow: "hidden",
-    minWidth: 240,
+  cameraMenuCard: {
+    borderCurve: "continuous",
+    borderRadius: 24,
     borderWidth: StyleSheet.hairlineWidth,
+    minWidth: 236,
+    overflow: "hidden",
     borderColor: colors.glassBorder,
     shadowColor: "#000",
-    shadowOffset: { width: 0, height: 8 },
-    shadowOpacity: 0.35,
-    shadowRadius: 20,
-    elevation: 8,
+    shadowOffset: { width: 0, height: 12 },
+    shadowOpacity: 0.18,
+    shadowRadius: 22,
   },
   cameraMenuItem: {
-    flexDirection: "row",
     alignItems: "center",
-    paddingHorizontal: spacing.lg + 2,
-    paddingVertical: spacing.md + 2,
-    gap: spacing.md,
+    flexDirection: "row",
+    gap: spacing.sm + 2,
+    paddingHorizontal: spacing.lg,
+    paddingVertical: spacing.md,
   },
-  cameraMenuSep: {
+  cameraMenuSeparator: {
     height: StyleSheet.hairlineWidth,
-    backgroundColor: "rgba(255,255,255,0.08)",
-    marginHorizontal: spacing.md,
+    marginHorizontal: spacing.lg,
+  },
+  cameraMenuSymbol: {
+    width: 20,
+    height: 20,
   },
   cameraMenuLabel: {
     ...typography.body,
-    color: colors.textPrimary,
     fontWeight: "500",
-  },
-  cameraMenuSymbol: {
-    width: 22,
-    height: 22,
+    letterSpacing: -0.28,
   },
 });
 

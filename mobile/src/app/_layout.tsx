@@ -17,16 +17,43 @@ export const unstable_settings = {
 
 export default function RootLayout() {
   const colorMode = useThemeStore((store) => store.colorMode);
+  const C = useThemeStore((store) => store.colors);
+  const navigationTheme = colorMode === "dark"
+    ? {
+      ...DarkTheme,
+      colors: {
+        ...DarkTheme.colors,
+        background: C.bgPrimary,
+        card: C.bgPrimary,
+      },
+    }
+    : {
+      ...DefaultTheme,
+      colors: {
+        ...DefaultTheme.colors,
+        background: C.bgPrimary,
+        card: C.bgPrimary,
+      },
+    };
 
   useEffect(() => {
     void SplashScreen.hideAsync();
   }, []);
 
   return (
-    <GestureHandlerRootView style={{ flex: 1 }}>
-      <ThemeProvider value={colorMode === "dark" ? DarkTheme : DefaultTheme}>
-        <Stack screenOptions={{ headerShown: false }} initialRouteName="(tabs)">
+    <GestureHandlerRootView style={{ flex: 1, backgroundColor: C.bgPrimary }}>
+      <ThemeProvider value={navigationTheme}>
+        <Stack
+          initialRouteName="(tabs)"
+          screenOptions={{
+            contentStyle: {
+              backgroundColor: C.bgPrimary,
+            },
+            headerShown: false,
+          }}
+        >
           <Stack.Screen name="(tabs)" />
+          <Stack.Screen name="chat-zoom" />
           <Stack.Screen
             name="goals-zoom"
             options={{

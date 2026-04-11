@@ -185,6 +185,51 @@ function AppearanceRow() {
   );
 }
 
+function BottomAccessoryModeRow() {
+  const C = useThemeStore((store) => store.colors);
+  const journalBottomAccessoryMode = useSettingsStore((store) => store.journalBottomAccessoryMode);
+  const setJournalBottomAccessoryMode = useSettingsStore((store) => store.setJournalBottomAccessoryMode);
+  const isCompact = journalBottomAccessoryMode === "compact";
+
+  return (
+    <View style={[styles.row, { borderBottomColor: C.separator }]}>
+      <IconBadge color="#6b7280" name="slider.horizontal.3" />
+      <View style={styles.rowBody}>
+        <Text style={[styles.rowLabel, { color: C.textPrimary }]}>Bottom Accessory</Text>
+        <Text style={[styles.rowSub, { color: C.textSecondary }]}>
+          {isCompact ? "Compact" : "Regular"}
+        </Text>
+      </View>
+      <View style={[styles.segmentedControl, { backgroundColor: C.bgPrimary }]}>
+        <TouchableOpacity
+          activeOpacity={0.75}
+          onPress={() => {
+            journalHaptics.selection();
+            setJournalBottomAccessoryMode("regular");
+          }}
+          style={[styles.segmentButton, !isCompact && { backgroundColor: C.bgTertiary }]}
+        >
+          <Text style={[styles.segmentLabel, { color: !isCompact ? C.textPrimary : C.textSecondary }]}>
+            Regular
+          </Text>
+        </TouchableOpacity>
+        <TouchableOpacity
+          activeOpacity={0.75}
+          onPress={() => {
+            journalHaptics.selection();
+            setJournalBottomAccessoryMode("compact");
+          }}
+          style={[styles.segmentButton, isCompact && { backgroundColor: C.bgTertiary }]}
+        >
+          <Text style={[styles.segmentLabel, { color: isCompact ? C.textPrimary : C.textSecondary }]}>
+            Compact
+          </Text>
+        </TouchableOpacity>
+      </View>
+    </View>
+  );
+}
+
 function formatWeightEntrySummary(weightEntries: Array<{ date?: string }> = []) {
   const lastEntry = weightEntries[0];
   if (!lastEntry?.date) {
@@ -226,6 +271,7 @@ export default function JournalSettingsScreen() {
         <Text style={[styles.headerTitle, { color: C.textPrimary }]}>Settings</Text>
         <GlassIconButton
           accessibilityLabel="Close settings"
+          color={C.textSecondary}
           iconSize={18}
           onPress={() => {
             journalHaptics.selection();
@@ -338,6 +384,7 @@ export default function JournalSettingsScreen() {
           <SectionTitle>Device Settings</SectionTitle>
           <Card>
             <AppearanceRow />
+            <BottomAccessoryModeRow />
             <ToggleRow
               badgeColor="#22c55e"
               label="Automatic Time Zone"

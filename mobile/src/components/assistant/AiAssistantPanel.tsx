@@ -1,11 +1,13 @@
-import React, { useEffect, useRef } from "react";
+import React, { useEffect, useRef, useState } from "react";
 import {
-  KeyboardAvoidingView,
+  ActionSheetIOS,
+  Alert,
+  Keyboard,
+  LayoutAnimation,
   Platform,
   ScrollView,
   type ScrollViewProps,
   StyleSheet,
-  Switch,
   Text,
   TextInput,
   TouchableOpacity,
@@ -14,7 +16,7 @@ import {
 import { GlassView, isLiquidGlassAvailable } from "expo-glass-effect";
 import { useAiAssistant } from "../../hooks/useAiAssistant";
 import { AiMessageBubble } from "./AiMessageBubble";
-import { GlassIconButton } from "../GlassIconButton";
+import { AppSymbol } from "../icons/AppSymbol";
 import { useThemeStore } from "../../store/themeStore";
 import { radius, spacing, typography } from "../../theme";
 
@@ -39,6 +41,9 @@ export function AiAssistantPanel({
   scrollIndicatorBottomInset = 0,
 }: AiAssistantPanelProps) {
   const C = useThemeStore((state) => state.colors);
+  const colorMode = useThemeStore((state) => state.colorMode);
+  const [keyboardOpen, setKeyboardOpen] = useState(false);
+  const [keyboardHeight, setKeyboardHeight] = useState(0);
   const scrollRef = useRef<ScrollView>(null);
   const {
     mode,
@@ -49,17 +54,16 @@ export function AiAssistantPanel({
     setInput,
     messages,
     selectedImage,
-    selectedFile,
     isLoading,
     error,
-    canSend,
     pickImage,
+    takePhoto,
     clearImage,
-    pickFile,
-    clearFile,
-    uploadSelectedFile,
+    pickAndUploadFile,
     sendMessage,
   } = useAiAssistant();
+  const inputRef = useRef<TextInput>(null);
+  const hasInputText = Boolean(input.trim());
 
   useEffect(() => {
     const id = setTimeout(() => {
@@ -69,12 +73,85 @@ export function AiAssistantPanel({
     return () => clearTimeout(id);
   }, [isLoading, messages.length]);
 
+  useEffect(() => {
+    const showEvent = Platform.OS === "ios" ? "keyboardWillShow" : "keyboardDidShow";
+    const hideEvent = Platform.OS === "ios" ? "keyboardWillHide" : "keyboardDidHide";
+    const show = Keyboard.addListener(showEvent, (e) => {
+      LayoutAnimation.configureNext(LayoutAnimation.Presets.easeInEaseOut);
+      setKeyboardOpen(true);
+      setKeyboardHeight(e.endCoordinates.height);
+    });
+    const hide = Keyboard.addListener(hideEvent, () => {
+      LayoutAnimation.configureNext(LayoutAnimation.Presets.easeInEaseOut);
+      setKeyboardOpen(false);
+      setKeyboardHeight(0);
+    });
+    return () => { show.remove(); hide.remove(); };
+  }, []);
+
+  function openAttachmentMenu() {
+    const actions = [
+      {
+        label: "Take Photo",
+        run: () => {
+          void takePhoto();
+        },
+      },
+      {
+        label: "Choose from Library",
+        run: () => {
+          void pickImage();
+        },
+      },
+      {
+        label: "Upload File",
+        run: () => {
+          void pickAndUploadFile();
+        },
+      },
+    ];
+
+    if (Platform.OS === "ios") {
+      ActionSheetIOS.showActionSheetWithOptions(
+        {
+          cancelButtonIndex: actions.length,
+          options: [...actions.map((action) => action.label), "Cancel"],
+          userInterfaceStyle: "dark",
+        },
+        (buttonIndex) => {
+          if (buttonIndex == null || buttonIndex >= actions.length) {
+            return;
+          }
+          actions[buttonIndex]?.run();
+          requestAnimationFrame(() => {
+            inputRef.current?.focus();
+          });
+        },
+      );
+      return;
+    }
+
+    Alert.alert(
+      "Add to chat",
+      undefined,
+      [
+        ...actions.map((action) => ({
+          text: action.label,
+          onPress: () => {
+            action.run();
+            requestAnimationFrame(() => {
+              inputRef.current?.focus();
+            });
+          },
+        })),
+        { text: "Cancel", style: "cancel" },
+      ],
+      { cancelable: true },
+    );
+  }
+
   return (
-    <KeyboardAvoidingView
-      style={styles.container}
-      behavior={Platform.OS === "ios" ? "padding" : undefined}
-      keyboardVerticalOffset={0}
-    >
+    <View style={styles.container}>
       {embedded ? (
         <View style={styles.embeddedHero}>
           <Text style={[styles.embeddedEyebrow, { color: C.accentCyan }]}>NUTRI ASSISTANT</Text>
@@ -86,44 +163,6 @@ export function AiAssistantPanel({
           </Text>
         </View>
       ) : null}
-
-      <View style={[styles.modeRow, embedded && styles.modeRowEmbedded]}>
-        {(["chat", "tools"] as const).map((value) => {
-          const active = mode === value;
-          return (
-            <TouchableOpacity
-              key={value}
-              activeOpacity={0.8}
-              onPress={() => setMode(value)}
-              style={[
-                styles.modeChip,
-                {
-                  backgroundColor: active ? C.accentBlue : C.bgSecondary,
-                  borderColor: active ? C.accentBlue : C.separator,
-                },
-              ]}
-            >
-              <Text style={[styles.modeChipText, { color: active ? "#fff" : C.textSecondary }]}>
-                {value === "chat" ? "Chat" : "Tools"}
-              </Text>
-            </TouchableOpacity>
-          );
-        })}
-
-        <View
-          style={[
-            styles.webToggle,
-            { borderColor: C.separator, backgroundColor: C.bgSecondary },
-          ]}
-        >
-          <Text style={[styles.webToggleText, { color: C.textSecondary }]}>Usar web</Text>
-          <Switch
-            value={useWeb}
-            onValueChange={setUseWeb}
-            disabled={mode === "tools"}
-          />
-        </View>
-      </View>
 
       <ScrollView
         ref={scrollRef}
@@ -158,101 +197,121 @@ export function AiAssistantPanel({
         {isLoading ? <AiMessageBubble isThinking /> : null}
       </ScrollView>
 
-      <GlassView
+      <View
         style={[
           styles.composerShell,
-          glass(C.glassBg),
-          bottomInset ? { marginBottom: spacing.lg + bottomInset } : null,
+          {
+            marginHorizontal: keyboardOpen ? spacing.lg : 32,
+            marginBottom: keyboardHeight > 0
+              ? keyboardHeight + spacing.lg
+              : spacing.lg + (bottomInset || 0),
+          },
         ]}
       >
-        <View style={styles.attachmentsRow}>
-          {selectedImage ? (
+        {selectedImage ? (
+          <View style={styles.attachmentsRow}>
             <View style={[styles.attachmentChip, { borderColor: C.separator }]}>
               <Text style={[styles.attachmentText, { color: C.textPrimary }]}>Image attached</Text>
               <TouchableOpacity onPress={clearImage} activeOpacity={0.75}>
                 <Text style={[styles.attachmentAction, { color: C.accentRed }]}>Remove</Text>
               </TouchableOpacity>
             </View>
-          ) : null}
-
-          {selectedFile ? (
-            <View style={[styles.attachmentChip, { borderColor: C.separator }]}>
-              <Text style={[styles.attachmentText, { color: C.textPrimary }]} numberOfLines={1}>
-                {selectedFile.name ?? "file"}
-              </Text>
-              <TouchableOpacity onPress={clearFile} activeOpacity={0.75}>
-                <Text style={[styles.attachmentAction, { color: C.accentRed }]}>Remove</Text>
-              </TouchableOpacity>
-            </View>
-          ) : null}
-        </View>
-
-        <TextInput
-          value={input}
-          onChangeText={setInput}
-          placeholder={mode === "tools" ? "Ex.: status do pedido 10023" : "Digite sua mensagem"}
-          placeholderTextColor={C.textTertiary}
-          style={[styles.input, { color: C.textPrimary }]}
-          multiline
-          textAlignVertical="top"
-        />
+          </View>
+        ) : null}
 
         {error ? (
           <Text style={[styles.errorText, { color: C.accentRed }]}>{error}</Text>
         ) : null}
 
-        <View style={styles.actionsRow}>
-          <View style={styles.leftActions}>
-            <GlassIconButton
-              onPress={pickImage}
-              accessibilityLabel="Selecionar imagem"
-              symbolName="photo"
-              color={C.accentPink}
-              size={42}
-              iconSize={19}
-            />
-            <GlassIconButton
-              onPress={pickFile}
-              accessibilityLabel="Selecionar arquivo"
-              symbolName="paperclip"
-              color={C.accentYellow}
-              size={42}
-              iconSize={19}
-            />
+        {/* Row that holds the (optionally separated) + button and the input pill */}
+        <View style={keyboardOpen ? styles.composerRowWrap : null}>
+          {keyboardOpen ? (
             <TouchableOpacity
+              accessibilityLabel="Add to chat"
               activeOpacity={0.82}
-              onPress={uploadSelectedFile}
-              disabled={!selectedFile || isLoading}
-              style={[
-                styles.uploadButton,
-                {
-                  backgroundColor: selectedFile && !isLoading ? C.bgSecondary : C.bgTertiary,
-                  borderColor: C.separator,
-                  opacity: selectedFile && !isLoading ? 1 : 0.5,
-                },
-              ]}
+              disabled={isLoading}
+              onPress={openAttachmentMenu}
             >
-              <Text style={[styles.uploadButtonText, { color: C.textSecondary }]}>Upload</Text>
+              <GlassView
+                colorScheme={colorMode}
+                glassEffectStyle="regular"
+                isInteractive
+                style={[
+                  styles.plusCircle,
+                  glass(C.glassBg),
+                  { borderColor: colorMode === "dark" ? "rgba(255,255,255,0.14)" : "rgba(0,0,0,0.08)" },
+                ]}
+              >
+                <AppSymbol color={C.textPrimary} name="plus" size={22} weight="regular" />
+              </GlassView>
             </TouchableOpacity>
-          </View>
+          ) : null}
 
-          <TouchableOpacity
-            activeOpacity={0.82}
-            onPress={sendMessage}
-            disabled={!canSend || isLoading}
+          <GlassView
+            colorScheme={colorMode}
+            glassEffectStyle="regular"
+            isInteractive={false}
             style={[
-              styles.sendButton,
+              styles.composerRow,
+              keyboardOpen && { flex: 1 },
+              glass(C.glassBg),
               {
-                backgroundColor: canSend && !isLoading ? C.accentBlue : C.bgTertiary,
-                opacity: canSend && !isLoading ? 1 : 0.6,
+                borderColor: colorMode === "dark"
+                  ? "rgba(255,255,255,0.14)"
+                  : "rgba(0,0,0,0.08)",
               },
             ]}
           >
-            <Text style={styles.sendButtonText}>Enviar</Text>
-          </TouchableOpacity>
+            {!keyboardOpen ? (
+              <TouchableOpacity
+                activeOpacity={0.82}
+                accessibilityLabel="Add to chat"
+                disabled={isLoading}
+                onPress={openAttachmentMenu}
+                style={styles.plusButton}
+              >
+                <AppSymbol color={C.textPrimary} name="plus" size={22} weight="regular" />
+              </TouchableOpacity>
+            ) : null}
+
+            <TextInput
+              ref={inputRef}
+              value={input}
+              onChangeText={setInput}
+              placeholder={mode === "tools" ? "Ex.: status do pedido 10023" : "Pergunte ao Chat"}
+              placeholderTextColor={C.textTertiary}
+              style={[styles.input, { color: C.textPrimary }]}
+              multiline
+              scrollEnabled
+              textAlignVertical="center"
+            />
+
+            <TouchableOpacity
+              activeOpacity={0.86}
+              onPress={sendMessage}
+              disabled={!hasInputText || isLoading}
+              style={styles.sendButtonTouch}
+            >
+              <View
+                style={[
+                  styles.sendButton,
+                  hasInputText && !isLoading
+                    ? styles.sendButtonActive
+                    : [styles.sendButtonIdle, { borderColor: C.separator }],
+                ]}
+              >
+                <AppSymbol
+                  color={hasInputText && !isLoading ? "#111111" : C.textTertiary}
+                  name="arrow.up"
+                  size={18}
+                  weight="semibold"
+                />
+              </View>
+            </TouchableOpacity>
+          </GlassView>
         </View>
-      </GlassView>
-    </KeyboardAvoidingView>
+      </View>
+    </View>
   );
 }
 
@@ -279,41 +338,6 @@ const styles = StyleSheet.create({
   embeddedBody: {
     ...typography.footnote,
     lineHeight: 18,
-  },
-  modeRow: {
-    flexDirection: "row",
-    alignItems: "center",
-    paddingHorizontal: spacing.xl,
-    paddingTop: spacing.lg,
-    gap: spacing.sm,
-  },
-  modeRowEmbedded: {
-    paddingTop: spacing.md,
-  },
-  modeChip: {
-    borderWidth: 1,
-    borderRadius: radius.full,
-    paddingHorizontal: spacing.md + 2,
-    paddingVertical: spacing.sm,
-  },
-  modeChipText: {
-    ...typography.footnote,
-    fontWeight: "700",
-  },
-  webToggle: {
-    marginLeft: "auto",
-    flexDirection: "row",
-    alignItems: "center",
-    gap: spacing.sm,
-    borderWidth: 1,
-    borderRadius: radius.full,
-    paddingLeft: spacing.md,
-    paddingRight: spacing.sm,
-    paddingVertical: spacing.xs,
-  },
-  webToggleText: {
-    ...typography.footnote,
-    fontWeight: "600",
   },
   messages: {
     flex: 1,
@@ -342,12 +366,7 @@ const styles = StyleSheet.create({
     lineHeight: 18,
   },
   composerShell: {
-    marginHorizontal: spacing.xl,
     marginTop: spacing.sm,
-    marginBottom: spacing.lg,
-    borderRadius: radius.xl,
-    overflow: "hidden",
-    padding: spacing.md,
     gap: spacing.sm,
   },
   attachmentsRow: {
@@ -373,43 +392,65 @@ const styles = StyleSheet.create({
   },
   input: {
     ...typography.body,
-    minHeight: 96,
-    maxHeight: 180,
-    paddingVertical: spacing.xs,
+    flex: 1,
+    maxHeight: 120,
+    minHeight: 24,
+    paddingVertical: 0,
+    paddingHorizontal: spacing.xs,
   },
   errorText: {
     ...typography.caption1,
     fontWeight: "600",
   },
-  actionsRow: {
+  composerRow: {
     flexDirection: "row",
     alignItems: "center",
-    justifyContent: "space-between",
-    gap: spacing.md,
+    gap: spacing.sm,
+    minHeight: 46,
+    borderWidth: StyleSheet.hairlineWidth,
+    borderRadius: radius.full,
+    overflow: "hidden",
+    paddingLeft: spacing.sm,
+    paddingRight: 5,
+    paddingVertical: 3,
   },
-  leftActions: {
+  plusButton: {
+    width: 34,
+    height: 34,
+    borderRadius: 17,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  sendButtonTouch: {
+    borderRadius: radius.full,
+  },
+  sendButton: {
+    width: 36,
+    height: 36,
+    borderRadius: 18,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  sendButtonActive: {
+    backgroundColor: "#ffffff",
+  },
+  sendButtonIdle: {
+    backgroundColor: "rgba(255,255,255,0.08)",
+    borderWidth: 1,
+  },
+  composerRowWrap: {
     flexDirection: "row",
     alignItems: "center",
     gap: spacing.sm,
   },
-  uploadButton: {
-    borderWidth: 1,
-    borderRadius: radius.full,
-    paddingHorizontal: spacing.md + 2,
-    paddingVertical: spacing.sm,
-  },
-  uploadButtonText: {
-    ...typography.footnote,
-    fontWeight: "700",
-  },
-  sendButton: {
-    borderRadius: radius.full,
-    paddingHorizontal: spacing.xl,
-    paddingVertical: spacing.sm + 2,
-  },
-  sendButtonText: {
-    ...typography.footnote,
-    color: "#fff",
-    fontWeight: "700",
+  plusCircle: {
+    width: 42,
+    height: 42,
+    borderRadius: 21,
+    alignItems: "center",
+    justifyContent: "center",
+    overflow: "hidden",
+    borderWidth: StyleSheet.hairlineWidth,
+    borderCurve: "continuous",
   },
 });

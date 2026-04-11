@@ -99,13 +99,13 @@ export default function JournalCalendarScreen() {
   const handleSelectDate = useCallback((date: string) => {
     journalHaptics.selection();
     setDate(date);
-    router.back();
+    router.dismissTo("/(tabs)/(journal)");
   }, [router, setDate]);
 
   const handleToday = useCallback(() => {
     journalHaptics.selection();
     setDate(todayStr);
-    router.back();
+    router.dismissTo("/(tabs)/(journal)");
   }, [router, setDate, todayStr]);
 
   const handleMonthChange = useCallback((month: { dateString: string }) => {

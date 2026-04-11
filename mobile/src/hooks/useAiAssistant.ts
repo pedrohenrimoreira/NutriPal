@@ -72,12 +72,7 @@ export function useAiAssistant() {
   const [mode, setMode] = useState<AiMode>("chat");
   const [useWeb, setUseWeb] = useState(false);
   const [input, setInput] = useState("");
-  const [messages, setMessages] = useState<AiUiMessage[]>([
-    createMessage({
-      role: "assistant",
-      text: "Posso responder com OpenAI, analisar imagem, usar web search e demonstrar tool calling no backend.",
-    }),
-  ]);
+  const [messages, setMessages] = useState<AiUiMessage[]>([]);
   const [selectedImage, setSelectedImage] = useState<LocalAsset | null>(null);
   const [selectedFile, setSelectedFile] = useState<LocalAsset | null>(null);
   const [isLoading, setIsLoading] = useState(false);
@@ -88,18 +83,30 @@ export function useAiAssistant() {
     [input, selectedImage],
   );
 
-  const pickImage = useCallback(async () => {
-    const permission = await ImagePicker.requestMediaLibraryPermissionsAsync();
+  const pickImageFromSource = useCallback(async (source: "camera" | "library") => {
+    const permission = source === "camera"
+      ? await ImagePicker.requestCameraPermissionsAsync()
+      : await ImagePicker.requestMediaLibraryPermissionsAsync();
+
     if (!permission.granted) {
-      setError("Permita acesso a fotos para anexar imagens.");
+      setError(
+        source === "camera"
+          ? "Permita acesso a camera para anexar imagens."
+          : "Permita acesso a fotos para anexar imagens.",
+      );
       return;
     }
 
-    const result = await ImagePicker.launchImageLibraryAsync({
+    const launchPicker = source === "camera"
+      ? ImagePicker.launchCameraAsync
+      : ImagePicker.launchImageLibraryAsync;
+
+    const result = await launchPicker({
       mediaTypes: ["images"] as any,
       allowsEditing: false,
       quality: 1,
       selectionLimit: 1,
+      cameraType: source === "camera" ? ImagePicker.CameraType.back : undefined,
     });
 
     if (result.canceled || !result.assets?.length) {
@@ -107,8 +114,17 @@ export function useAiAssistant() {
     }
 
     setSelectedImage(toLocalImage(result.assets[0]));
+    setSelectedFile(null);
     setError(null);
   }, []);
+
+  const pickImage = useCallback(async () => {
+    await pickImageFromSource("library");
+  }, [pickImageFromSource]);
+
+  const takePhoto = useCallback(async () => {
+    await pickImageFromSource("camera");
+  }, [pickImageFromSource]);
 
   const clearImage = useCallback(() => {
     setSelectedImage(null);
@@ -132,16 +148,12 @@ export function useAiAssistant() {
     setSelectedFile(null);
   }, []);
 
-  const uploadSelectedFile = useCallback(async () => {
-    if (!selectedFile || isLoading) {
-      return;
-    }
-
+  const uploadFileAsset = useCallback(async (file: LocalAsset) => {
     setIsLoading(true);
     setError(null);
 
     try {
-      const uploaded = await uploadFile({ file: selectedFile });
+      const uploaded = await uploadFile({ file });
       setMessages((current) => [
         ...current,
         createMessage({
@@ -165,9 +177,37 @@ export function useAiAssistant() {
         }),
       ]);
     } finally {
+      setSelectedFile(null);
       setIsLoading(false);
     }
-  }, [isLoading, selectedFile]);
+  }, []);
+
+  const uploadSelectedFile = useCallback(async () => {
+    if (!selectedFile || isLoading) {
+      return;
+    }
+    await uploadFileAsset(selectedFile);
+  }, [isLoading, selectedFile, uploadFileAsset]);
+
+  const pickAndUploadFile = useCallback(async () => {
+    if (isLoading) {
+      return;
+    }
+
+    const result = await DocumentPicker.getDocumentAsync({
+      copyToCacheDirectory: true,
+      multiple: false,
+    });
+
+    if (result.canceled || !result.assets?.length) {
+      return;
+    }
+
+    const file = toLocalFile(result.assets[0]);
+    setSelectedImage(null);
+    setSelectedFile(file);
+    await uploadFileAsset(file);
+  }, [isLoading, uploadFileAsset]);
 
   const sendMessage = useCallback(async () => {
     if (!canSend || isLoading) {
@@ -192,26 +232,26 @@ export function useAiAssistant() {
     try {
       const response = mode === "tools"
         ? await toolChat({
-            messages: nextHistory,
-            systemPrompt: TOOL_SYSTEM_PROMPT,
-          })
+          messages: nextHistory,
+          systemPrompt: TOOL_SYSTEM_PROMPT,
+        })
         : selectedImage
           ? await vision({
-              input: text,
-              history: nextHistory.slice(0, -1),
-              systemPrompt: VISION_SYSTEM_PROMPT,
-              image: selectedImage,
-            })
+            input: text,
+            history: nextHistory.slice(0, -1),
+            systemPrompt: VISION_SYSTEM_PROMPT,
+            image: selectedImage,
+          })
           : useWeb
             ? await webChat({
-                messages: nextHistory,
-                systemPrompt: CHAT_SYSTEM_PROMPT,
-                useWeb: true,
-              })
+              messages: nextHistory,
+              systemPrompt: CHAT_SYSTEM_PROMPT,
+              useWeb: true,
+            })
             : await chat({
-                messages: nextHistory,
-                systemPrompt: CHAT_SYSTEM_PROMPT,
-              });
+              messages: nextHistory,
+              systemPrompt: CHAT_SYSTEM_PROMPT,
+            });
 
       setMessages((current) => [
         ...current,
@@ -257,8 +297,10 @@ export function useAiAssistant() {
     error,
     canSend,
     pickImage,
+    takePhoto,
     clearImage,
     pickFile,
+    pickAndUploadFile,
     clearFile,
     uploadSelectedFile,
     sendMessage,
